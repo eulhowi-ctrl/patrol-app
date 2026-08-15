@@ -1,0 +1,14 @@
+{
+  "name": "직책자 순찰앱",
+  "short_name": "순찰앱",
+  "description": "현장 안전 순찰 온디바이스 AI 감지 PWA",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

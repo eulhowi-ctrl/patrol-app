@@ -1,0 +1,24 @@
+services:
+  backend:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+    container_name: patrol-app-backend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    env_file:
+      - ../web/.env
+    # 1GB RAM 인스턴스 보호: 컨테이너 메모리 상한선 지정 (OOM Killer 대비)
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

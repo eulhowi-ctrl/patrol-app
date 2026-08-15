@@ -1,0 +1,35 @@
+{
+  "packageId": "com.example.patrolapp",
+  "host": "REPLACE_WITH_YOUR_DOMAIN",
+  "name": "직책자 순찰앱",
+  "launcherName": "순찰앱",
+  "display": "standalone",
+  "orientation": "portrait",
+  "themeColor": "#0B1220",
+  "navigationColor": "#0B1220",
+  "backgroundColor": "#0B1220",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "https://REPLACE_WITH_YOUR_DOMAIN/icons/icon-512.png",
+  "maskableIconUrl": "https://REPLACE_WITH_YOUR_DOMAIN/icons/icon-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "patrol-app"
+  },
+  "appVersion": "1",
+  "appVersionName": "0.1.0",
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://REPLACE_WITH_YOUR_DOMAIN/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": { "enabled": false },
+    "playBilling": { "enabled": false }
+  },
+  "permissions": [
+    "android.permission.CAMERA",
+    "android.permission.INTERNET",
+    "android.permission.ACCESS_NETWORK_STATE"
+  ]
+}
