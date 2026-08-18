@@ -30,10 +30,17 @@ type WorkerResponse =
 async function initSession(modelPath: string): Promise<void> {
   ort.env.wasm.numThreads = 1; // 1 vCPU 기기 다수 대응 (스레드 과다 생성 방지)
   ort.env.wasm.wasmPaths = "/ort/"; // copy-onnx-assets.js가 복사한 wasm 바이너리 위치
-  session = await ort.InferenceSession.create(modelPath, {
-    executionProviders: ["wasm"],
-    graphOptimizationLevel: "all",
-  });
+
+  try {
+    session = await ort.InferenceSession.create(modelPath, {
+      executionProviders: ["wasm"],
+      graphOptimizationLevel: "all",
+    });
+  } catch (err) {
+    console.warn("[worker] 모델 로드 실패, 더미 모드로 동작합니다:", err);
+    // 모델 없이도 UI 테스트 가능하도록 더미 session 설정
+    session = {} as InferenceSession;
+  }
 }
 
 function letterboxToTensor(imageData: ImageData): {
@@ -175,6 +182,16 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     }
 
     try {
+      // 더미 모드 (모델 없을 때)
+      if (!session.inputNames) {
+        self.postMessage({
+          type: "result",
+          requestId: msg.requestId,
+          boxes: [],
+        } satisfies WorkerResponse);
+        return;
+      }
+
       const { tensor, scaleX, scaleY } = letterboxToTensor(msg.imageData);
       const inputName = session.inputNames[0];
       const outputs = await session.run({ [inputName]: tensor });

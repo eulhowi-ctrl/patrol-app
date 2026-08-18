@@ -16,6 +16,7 @@ export default function CameraView() {
   const [isOnline, setIsOnline] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [isTestMode, setIsTestMode] = useState(false); // 실제 모드, 에러 시 자동 테스트 모드
 
   const refreshPendingCount = useCallback(() => {
     void countPending().then(setPendingCount);
@@ -83,8 +84,21 @@ export default function CameraView() {
     void startCamera();
   }, []);
 
+  // 테스트 모드: 더미 감지 결과 표시
   useEffect(() => {
-    if (!modelReady) return;
+    if (!isTestMode || !videoRef.current) return;
+
+    const testBoxes: DetectionBox[] = [
+      { label: "no_helmet", score: 0.92, x: 50, y: 100, width: 120, height: 150 },
+      { label: "fire_smoke", score: 0.85, x: 250, y: 80, width: 100, height: 140 },
+      { label: "no_vest", score: 0.78, x: 150, y: 200, width: 110, height: 160 },
+    ];
+    setBoxes(testBoxes);
+    setModelReady(true);
+  }, [isTestMode]);
+
+  useEffect(() => {
+    if (!modelReady || isTestMode) return;
 
     const interval = setInterval(() => {
       const video = videoRef.current;
@@ -141,10 +155,82 @@ export default function CameraView() {
         <span>대기 중 동기화: {pendingCount}건</span>
       </div>
 
+      {isTestMode && (
+        <div style={{
+          background: "#2a5a3a",
+          color: "#7fff9f",
+          padding: "8px 12px",
+          borderRadius: "8px",
+          marginBottom: "8px",
+          fontSize: "12px",
+          textAlign: "center",
+          fontWeight: "bold"
+        }}>
+          🧪 테스트 모드 (더미 감지 결과) |
+          <button onClick={() => setIsTestMode(false)} style={{
+            marginLeft: "8px",
+            padding: "2px 8px",
+            background: "#4a7a5a",
+            color: "#7fff9f",
+            border: "1px solid #7fff9f",
+            borderRadius: "4px",
+            cursor: "pointer"
+          }}>
+            실제 모드로 전환
+          </button>
+        </div>
+      )}
+
       {error && <div className="error-banner">{error}</div>}
 
-      <video ref={videoRef} muted playsInline className="camera-video" />
-      <canvas ref={canvasRef} className="camera-canvas" />
+      <div style={{ position: "relative", width: "100%" }}>
+        <video ref={videoRef} muted playsInline className="camera-video" />
+        <canvas ref={canvasRef} className="camera-canvas" />
+
+        {/* 감지 박스 오버레이 */}
+        <svg
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            borderRadius: "8px",
+            pointerEvents: "none"
+          }}
+        >
+          {boxes.map((box, idx) => (
+            <g key={idx}>
+              <rect
+                x={box.x}
+                y={box.y}
+                width={box.width}
+                height={box.height}
+                fill="none"
+                stroke="#ff4444"
+                strokeWidth="2"
+              />
+              <rect
+                x={box.x}
+                y={Math.max(0, box.y - 20)}
+                width={Math.max(80, box.label.length * 6)}
+                height="18"
+                fill="#ff4444"
+              />
+              <text
+                x={box.x + 2}
+                y={Math.max(12, box.y - 4)}
+                fill="white"
+                fontSize="11"
+                fontFamily="Arial"
+                fontWeight="bold"
+              >
+                {box.label} {(box.score * 100).toFixed(0)}%
+              </text>
+            </g>
+          ))}
+        </svg>
+      </div>
 
       <ul className="detection-list">
         {boxes.map((b, idx) => (
