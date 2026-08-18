@@ -51,3 +51,15 @@ docker-compose.override.yml
 *.pem
 *.key
 *.crt
+
+# 파이썬 학습 환경 (venv, 실행 산출물)
+.venv/
+__pycache__/
+*.pyc
+
+# 학습 데이터/산출물 — 용량이 크고 재생성 가능(스크립트로 다시 받음) 하므로 커밋 제외
+training/raw_datasets/
+training/merged_yolo/
+training/harness_crops/
+training/runs/
+yolov8n.pt
