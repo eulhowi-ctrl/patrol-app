@@ -45,7 +45,7 @@ export interface DetectionBox {
 // sleeve.onnx, pants.onnx). 우리 6클래스 탐지기에는 person 클래스가 없어서,
 // COCO 사전학습 YOLOv8n(person.onnx, 재학습 없이 그대로 사용)으로 사람 박스만
 // 따로 찾아 크롭한 뒤 분류기에 넣는다(detection.worker.ts의 classifyClothing).
-// 화면에 여러 명이 있으면 가장 크게 잡힌 사람 한 명만 판정 — 다인원 개별
+// 화면에 여러 명이 있으면 화면 정중앙에 가장 가까운 사람 한 명만 판정 — 다인원 개별
 // 판정은 아직 미구현.
 export type SleeveLength = "long_sleeve" | "short_sleeve";
 export type PantsLength = "long_pants" | "short_pants";

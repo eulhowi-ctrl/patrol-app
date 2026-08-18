@@ -197,11 +197,13 @@ async function runClassifier(
   }
 }
 
-/** person.onnx(COCO YOLOv8n) 출력에서 person(class 0) 박스만 추출 + NMS, 가장 큰 박스 하나 선택. */
-function detectLargestPerson(
+/** person.onnx(COCO YOLOv8n) 출력에서 person(class 0) 박스만 추출, 화면 정중앙에 가장 가까운 사람 하나 선택. */
+function detectMostCentralPerson(
   output: Tensor,
   scaleX: number,
-  scaleY: number
+  scaleY: number,
+  frameWidth: number,
+  frameHeight: number
 ): SimpleBox | null {
   const data = output.data as Float32Array;
   const [, , numAnchors] = output.dims as number[];
@@ -219,9 +221,16 @@ function detectLargestPerson(
   }
   if (candidates.length === 0) return null;
 
-  // 여러 사람이 있으면 화면에서 가장 크게(가까이) 잡힌 사람 하나만 판정한다
+  // 여러 사람이 있으면 화면 정중앙에 가장 가까이 있는 사람 하나만 판정한다
   // (다인원 개별 판정은 추후 개선 여지 — labels.ts ClothingAttributes 주석 참고).
-  candidates.sort((a, b) => b.width * b.height - a.width * a.height);
+  const centerX = frameWidth / 2;
+  const centerY = frameHeight / 2;
+  const distanceToCenter = (b: SimpleBox) => {
+    const bx = b.x + b.width / 2;
+    const by = b.y + b.height / 2;
+    return Math.hypot(bx - centerX, by - centerY);
+  };
+  candidates.sort((a, b) => distanceToCenter(a) - distanceToCenter(b));
   return candidates[0];
 }
 
@@ -233,7 +242,9 @@ async function classifyClothing(image: PlainImage): Promise<ClothingAttributes |
   const inputName = personSession.inputNames[0];
   const outputs = await personSession.run({ [inputName]: personTensor });
   const outputName = personSession.outputNames[0];
-  const personBox = detectLargestPerson(outputs[outputName], scaleX, scaleY);
+  const personBox = detectMostCentralPerson(
+    outputs[outputName], scaleX, scaleY, image.width, image.height
+  );
   if (!personBox) return null; // 사람이 안 보이면 옷차림 판정 자체를 생략 (배경만 잘못 판정하는 것 방지)
 
   const crop = cropImage(image, padBox(personBox, image.width, image.height));
