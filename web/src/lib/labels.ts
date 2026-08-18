@@ -42,9 +42,11 @@ export interface DetectionBox {
 
 // 2단계 보조 분류기 — 옷차림/착용 속성 판정 (물체가 아니라 사람의 상태라
 // YOLO 클래스로 넣지 않고 별도 이진 분류기 3개로 분리: harness.onnx,
-// sleeve.onnx, pants.onnx). 현재는 1단계 모델에 person 박스가 없어
-// 프레임 전체를 입력으로 쓴다 — person 크롭 대비 정확도가 낮을 수 있음
-// (추후 1단계에 person 클래스를 추가해 크롭 입력으로 바꾸는 게 개선 방향).
+// sleeve.onnx, pants.onnx). 우리 6클래스 탐지기에는 person 클래스가 없어서,
+// COCO 사전학습 YOLOv8n(person.onnx, 재학습 없이 그대로 사용)으로 사람 박스만
+// 따로 찾아 크롭한 뒤 분류기에 넣는다(detection.worker.ts의 classifyClothing).
+// 화면에 여러 명이 있으면 가장 크게 잡힌 사람 한 명만 판정 — 다인원 개별
+// 판정은 아직 미구현.
 export type SleeveLength = "long_sleeve" | "short_sleeve";
 export type PantsLength = "long_pants" | "short_pants";
 
