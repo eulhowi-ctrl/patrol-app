@@ -10,6 +10,8 @@ import { bulkSync, registerSyncListeners } from "../lib/sync";
 import {
   HIGH_PRIORITY_LABELS,
   LABEL_KO,
+  clothingViolations,
+  type ClothingAttributes,
   type DetectionBox,
 } from "../lib/labels";
 
@@ -21,11 +23,10 @@ interface SessionSummary {
   byLabel: Record<string, number>;
 }
 
-function boxesSignature(boxes: DetectionBox[]): string {
-  return boxes
-    .map((b) => b.label)
-    .sort()
-    .join(",");
+function boxesSignature(boxes: DetectionBox[], clothing: ClothingAttributes | null): string {
+  const boxSig = boxes.map((b) => b.label).sort().join(",");
+  const clothingSig = clothingViolations(clothing).sort().join(",");
+  return `${boxSig}|${clothingSig}`;
 }
 
 export default function CameraView() {
@@ -37,6 +38,7 @@ export default function CameraView() {
 
   const [modelReady, setModelReady] = useState(false);
   const [boxes, setBoxes] = useState<DetectionBox[]>([]);
+  const [clothing, setClothing] = useState<ClothingAttributes | null>(null);
   const [isOnline, setIsOnline] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -78,7 +80,8 @@ export default function CameraView() {
         setError(data.message);
       } else if (data.type === "result") {
         setBoxes(data.boxes);
-        handleDetectionResult(data.boxes);
+        setClothing(data.clothing);
+        handleDetectionResult(data.boxes, data.clothing);
       }
     };
 
@@ -160,18 +163,22 @@ export default function CameraView() {
   // 새로운(다른) 위반 조합이 감지되면 배너를 다시 띄운다 — 같은 위반이 계속
   // 이어지는 동안 0.5초마다 배너가 깜빡이며 재등장하는 걸 방지하기 위함.
   useEffect(() => {
-    const sig = boxesSignature(boxes);
+    const sig = boxesSignature(boxes, clothing);
     if (sig !== lastSignatureRef.current) {
       lastSignatureRef.current = sig;
       setBannerDismissed(false);
     }
-  }, [boxes]);
+  }, [boxes, clothing]);
 
-  const handleDetectionResult = useCallback(async (detected: DetectionBox[]) => {
+  const handleDetectionResult = useCallback(async (
+    detected: DetectionBox[],
+    clothingResult: ClothingAttributes | null
+  ) => {
     const highPriority = detected.filter((b) =>
       HIGH_PRIORITY_LABELS.includes(b.label)
     );
-    if (detected.length === 0) return;
+    const cViolations = clothingViolations(clothingResult);
+    if (detected.length === 0 && cViolations.length === 0) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -181,6 +188,7 @@ export default function CameraView() {
       capturedAt: new Date().toISOString(),
       labels: detected,
       snapshotBase64,
+      clothingViolations: cViolations.length > 0 ? cViolations : undefined,
     });
     refreshPendingCount();
 
@@ -211,6 +219,9 @@ export default function CameraView() {
       for (const b of r.labels) {
         const ko = LABEL_KO[b.label] ?? b.label;
         byLabel[ko] = (byLabel[ko] ?? 0) + 1;
+      }
+      for (const v of r.clothingViolations ?? []) {
+        byLabel[v] = (byLabel[v] ?? 0) + 1;
       }
     }
     const durationMin = Math.max(
@@ -260,8 +271,14 @@ export default function CameraView() {
   }, [noteText, refreshPendingCount]);
 
   const highPriorityNow = boxes.filter((b) => HIGH_PRIORITY_LABELS.includes(b.label));
-  const showAlertBanner = boxes.length > 0 && !bannerDismissed;
-  const showAllClearBanner = modelReady && !isTestMode && boxes.length === 0;
+  const cViolationsNow = clothingViolations(clothing);
+  const hasAnyIssue = boxes.length > 0 || cViolationsNow.length > 0;
+  const showAlertBanner = hasAnyIssue && !bannerDismissed;
+  const showAllClearBanner = modelReady && !isTestMode && !hasAnyIssue;
+  const alertText = [
+    ...boxes.map((b) => LABEL_KO[b.label] ?? b.label),
+    ...cViolationsNow,
+  ].join(", ");
 
   return (
     <div className="camera-view">
@@ -305,9 +322,7 @@ export default function CameraView() {
       )}
       {showAlertBanner && (
         <div className={`verdict-banner ${highPriorityNow.length > 0 ? "verdict-danger" : "verdict-warning"}`}>
-          <span>
-            ⚠️ {boxes.map((b) => LABEL_KO[b.label] ?? b.label).join(", ")} 감지됨
-          </span>
+          <span>⚠️ {alertText} 감지됨</span>
           <button className="verdict-ack" onClick={() => setBannerDismissed(true)}>
             확인
           </button>
@@ -386,6 +401,9 @@ export default function CameraView() {
             {LABEL_KO[b.label] ?? b.label} ({(b.score * 100).toFixed(1)}%)
           </li>
         ))}
+        {cViolationsNow.map((v) => (
+          <li key={v}>{v}</li>
+        ))}
       </ul>
 
       {/* 순찰 시작/종료 버튼 */}
@@ -452,9 +470,10 @@ export default function CameraView() {
                       {!r.synced && " · 동기화 대기"}
                     </div>
                     <div className="log-item-labels">
-                      {r.labels.length > 0
-                        ? r.labels.map((b) => LABEL_KO[b.label] ?? b.label).join(", ")
-                        : r.note || "(내용 없음)"}
+                      {[
+                        ...r.labels.map((b) => LABEL_KO[b.label] ?? b.label),
+                        ...(r.clothingViolations ?? []),
+                      ].join(", ") || r.note || "(내용 없음)"}
                     </div>
                   </div>
                 </div>

@@ -19,8 +19,8 @@ web/public/sw.js
 web/public/workbox-*.js
 web/public/worker-*.js
 
-# 실제 학습된 모델 가중치 (용량/라이선스상 저장소에 포함하지 않음)
-web/public/models/*.onnx
+# 학습된 모델 가중치 — 4개 합쳐 13MB 정도라 커밋함(Cloudflare Pages가
+# git 리포에서 직접 빌드하므로 실 배포에 필요). 용량이 커지면 재검토할 것.
 
 # onnxruntime-web 정적 산출물 (postinstall 스크립트가 node_modules에서 복사, 커밋 불필요)
 web/public/ort/

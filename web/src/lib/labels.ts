@@ -40,14 +40,29 @@ export interface DetectionBox {
   height: number;
 }
 
-// 2단계 보조 분류기 — 1단계에서 찾은 person 영역을 잘라 옷차림 속성을 판정한다
-// (소매/바지 길이는 물체가 아니라 옷 속성이라 YOLO 클래스로 넣지 않음).
+// 2단계 보조 분류기 — 옷차림/착용 속성 판정 (물체가 아니라 사람의 상태라
+// YOLO 클래스로 넣지 않고 별도 이진 분류기 3개로 분리: harness.onnx,
+// sleeve.onnx, pants.onnx). 현재는 1단계 모델에 person 박스가 없어
+// 프레임 전체를 입력으로 쓴다 — person 크롭 대비 정확도가 낮을 수 있음
+// (추후 1단계에 person 클래스를 추가해 크롭 입력으로 바꾸는 게 개선 방향).
 export type SleeveLength = "long_sleeve" | "short_sleeve";
 export type PantsLength = "long_pants" | "short_pants";
 
 export interface ClothingAttributes {
+  harnessWorn: boolean;
+  harnessScore: number;
   sleeve: SleeveLength;
   sleeveScore: number;
   pants: PantsLength;
   pantsScore: number;
+}
+
+// ClothingAttributes를 "위반 여부" 관점의 배지 목록으로 변환 — 배너/기록에 표시.
+export function clothingViolations(c: ClothingAttributes | null): string[] {
+  if (!c) return [];
+  const out: string[] = [];
+  if (!c.harnessWorn) out.push("안전그네 미착용");
+  if (c.sleeve === "short_sleeve") out.push("반팔 착용(긴팔 규정)");
+  if (c.pants === "short_pants") out.push("반바지 착용(긴바지 규정)");
+  return out;
 }

@@ -9,6 +9,7 @@ export interface DetectionRecord {
   synced: boolean;
   manual?: boolean; // 사람이 수동 캡처한 기록(AI 미탐지 보완용)인지 여부
   note?: string; // 수동 캡처 시 남긴 메모
+  clothingViolations?: string[]; // 2단계 분류기(안전그네/소매/바지) 위반 항목
 }
 
 const DB_NAME = "patrol-app-db";
