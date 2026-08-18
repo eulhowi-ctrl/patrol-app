@@ -21,6 +21,16 @@ export type DetectionLabel = (typeof DETECTION_LABELS)[number];
 // man_down / fire_smoke는 즉시 알림이 필요한 고위험 이벤트로 분류한다.
 export const HIGH_PRIORITY_LABELS: DetectionLabel[] = ["fire_smoke", "man_down"];
 
+// 사람이 읽는 배너/기록 화면용 한글 표시명 (기술적 클래스명 그대로 노출하지 않기 위함).
+export const LABEL_KO: Record<DetectionLabel, string> = {
+  no_helmet: "안전모 미착용",
+  no_vest: "안전조끼 미착용",
+  no_safety_glasses: "보안경 미착용",
+  no_mask: "마스크 미착용",
+  fire_smoke: "화재/연기",
+  man_down: "쓰러짐 의심",
+};
+
 export interface DetectionBox {
   label: DetectionLabel;
   score: number;

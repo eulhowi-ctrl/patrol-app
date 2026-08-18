@@ -61,5 +61,7 @@ __pycache__/
 training/raw_datasets/
 training/merged_yolo/
 training/harness_crops/
+training/sleeve_crops/
+training/pants_crops/
 training/runs/
 yolov8n.pt
