@@ -28,7 +28,7 @@ function restore() {
 
 moveOut();
 try {
-  execSync("next build", {
+  execSync("npx next build", {
     stdio: "inherit",
     env: { ...process.env, CF_PAGES_BUILD: "1" },
   });
