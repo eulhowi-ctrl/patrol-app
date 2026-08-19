@@ -82,20 +82,20 @@ export async function getTodayDetections(): Promise<DetectionRecord[]> {
   return all.filter((r) => r.capturedAt.startsWith(todayKey));
 }
 
-/** 동기화 완료된 7일 이상 오래된 레코드 자동 삭제 (IndexedDB 용량 관리) */
+/** 동기화 완료된 3일 이상 오래된 레코드 자동 삭제 (IndexedDB 용량 관리) */
 export async function cleanupOldSyncedRecords(): Promise<number> {
   const db = await getDb();
   const all = (await db.getAll(STORE_NAME)) as DetectionRecord[];
   const now = new Date();
-  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
 
   let deleteCount = 0;
   const tx = db.transaction(STORE_NAME, "readwrite");
 
   for (const record of all) {
     const recordDate = new Date(record.capturedAt);
-    // 동기화 완료 + 7일 이상 된 기록만 삭제
-    if (record.synced && recordDate < sevenDaysAgo) {
+    // 동기화 완료 + 3일 이상 된 기록만 삭제
+    if (record.synced && recordDate < threeDaysAgo) {
       await tx.store.delete(record.id!);
       deleteCount++;
     }
