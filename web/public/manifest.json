@@ -1,7 +1,7 @@
 {
-  "name": "직책자 순찰앱",
-  "short_name": "순찰앱",
-  "description": "현장 안전 순찰 온디바이스 AI 감지 PWA",
+  "name": "ARGUS - AI Safety Patrol",
+  "short_name": "ARGUS",
+  "description": "AI 기반 현장 안전 감시 시스템 - 놓치지 않는 눈",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0b1220",
