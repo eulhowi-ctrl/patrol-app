@@ -223,29 +223,19 @@ main {
 }
 
 .user-guide-tab {
-  top: calc(50% - 80px);
+  top: calc(50% - 100px);
   opacity: 1;
   transition: opacity 0.2s ease;
 }
 
 .today-log-tab {
-  top: calc(50% + 10px);
+  top: calc(50% + 30px);
   opacity: 1;
   transition: opacity 0.2s ease;
 }
 
-/* 한 탭이 열려있으면 다른 탭의 텍스트는 투명하게 처리 */
-.user-guide-tab.log-tab-open ~ .today-log-tab {
-  opacity: 0.3;
-}
-
-.today-log-tab.log-tab-open ~ .user-guide-tab {
-  opacity: 0.3;
-}
-
 .log-tab-open {
   background: #1f6feb;
-  opacity: 1 !important;
 }
 
 .log-backdrop {

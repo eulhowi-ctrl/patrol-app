@@ -450,9 +450,9 @@ export default function CameraView() {
         className={`log-tab user-guide-tab ${showUserGuide ? "log-tab-open" : ""}`}
         onClick={() => setShowUserGuide(!showUserGuide)}
         aria-label="사용자 설명"
-        style={{ opacity: showLog ? 0.2 : 1 }}
+        style={{ opacity: showLog ? 0.15 : 1 }}
       >
-        ❓ 사용자 설명
+        ❓ 설명
       </button>
 
       {/* 오늘의 기록 — 왼쪽 화면 탭 형식 */}
@@ -460,9 +460,9 @@ export default function CameraView() {
         className={`log-tab today-log-tab ${showLog ? "log-tab-open" : ""}`}
         onClick={toggleLog}
         aria-label="오늘의 기록"
-        style={{ opacity: showUserGuide ? 0.2 : 1 }}
+        style={{ opacity: showUserGuide ? 0.15 : 1 }}
       >
-        📋 오늘의 기록
+        📋 기록
       </button>
       {showUserGuide && (
         <>
