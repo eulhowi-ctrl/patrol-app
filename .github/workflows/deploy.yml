@@ -3,34 +3,37 @@ name: Deploy to Cloudflare Pages
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './web/package-lock.json'
 
       - name: Install dependencies
         working-directory: ./web
         run: npm ci
 
-      - name: Build Next.js
+      - name: Build for Cloudflare Pages
         working-directory: ./web
-        run: npm run build
+        run: node scripts/build-cloudflare.js
 
-      - name: Upload to Cloudflare Pages
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Deploy to Cloudflare Pages
         uses: cloudflare/pages-action@v1
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           projectName: patrol-app
-          directory: ./web/.next/standalone
+          directory: ./web/out
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
