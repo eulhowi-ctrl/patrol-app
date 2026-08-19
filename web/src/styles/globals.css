@@ -204,11 +204,10 @@ main {
   color: white;
 }
 
-/* 오늘의 기록 — 왼쪽 화면 탭 + 슬라이드 드로어 */
+/* 왼쪽 화면 탭 + 슬라이드 드로어 */
 .log-tab {
   position: fixed;
   left: 0;
-  top: 50%;
   transform: translateY(-50%) rotate(-90deg);
   transform-origin: left top;
   background: #1a2744;
@@ -221,6 +220,14 @@ main {
   cursor: pointer;
   z-index: 60;
   white-space: nowrap;
+}
+
+.user-guide-tab {
+  top: calc(50% - 50px);
+}
+
+.today-log-tab {
+  top: 50%;
 }
 
 .log-tab-open {

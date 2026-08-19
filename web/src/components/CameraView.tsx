@@ -53,6 +53,8 @@ export default function CameraView() {
   const [showLog, setShowLog] = useState(false);
   const [todayRecords, setTodayRecords] = useState<DetectionRecord[]>([]);
 
+  const [showUserGuide, setShowUserGuide] = useState(false);
+
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
 
@@ -438,14 +440,78 @@ export default function CameraView() {
         </div>
       )}
 
+      {/* 사용자 설명 — 왼쪽 화면 탭 형식 */}
+      <button
+        className={`log-tab user-guide-tab ${showUserGuide ? "log-tab-open" : ""}`}
+        onClick={() => setShowUserGuide(!showUserGuide)}
+        aria-label="사용자 설명"
+      >
+        ❓ 사용자 설명
+      </button>
+
       {/* 오늘의 기록 — 왼쪽 화면 탭 형식 */}
       <button
-        className={`log-tab ${showLog ? "log-tab-open" : ""}`}
+        className={`log-tab today-log-tab ${showLog ? "log-tab-open" : ""}`}
         onClick={toggleLog}
         aria-label="오늘의 기록"
       >
         📋 오늘의 기록
       </button>
+      {showUserGuide && (
+        <>
+          <div className="log-backdrop" onClick={() => setShowUserGuide(false)} />
+          <div className="log-drawer">
+            <div className="log-drawer-header">
+              <span>사용자 설명</span>
+              <button className="log-close" onClick={() => setShowUserGuide(false)}>✕</button>
+            </div>
+            <div className="log-drawer-list" style={{ lineHeight: "1.6" }}>
+              <div style={{ padding: "12px", fontSize: "13px" }}>
+                <div style={{ marginBottom: "16px", borderBottom: "1px solid #ddd", paddingBottom: "12px" }}>
+                  <div style={{ fontWeight: "bold", marginBottom: "4px" }}>% (신뢰도)</div>
+                  <div style={{ color: "#666" }}>카메라에서 감지된 내용을 모델이 확신하는 정도 (0~100%). 높을수록 정확한 감지입니다.</div>
+                </div>
+
+                <div style={{ marginBottom: "16px", borderBottom: "1px solid #ddd", paddingBottom: "12px" }}>
+                  <div style={{ fontWeight: "bold", marginBottom: "4px" }}>안전모 미착용</div>
+                  <div style={{ color: "#666" }}>머리를 노출하고 있는 인원이 감지됨 (안전모를 쓰지 않음).</div>
+                </div>
+
+                <div style={{ marginBottom: "16px", borderBottom: "1px solid #ddd", paddingBottom: "12px" }}>
+                  <div style={{ fontWeight: "bold", marginBottom: "4px" }}>안전조끼 미착용</div>
+                  <div style={{ color: "#666" }}>주황·노랑색 조끼를 입지 않은 인원이 감지됨.</div>
+                </div>
+
+                <div style={{ marginBottom: "16px", borderBottom: "1px solid #ddd", paddingBottom: "12px" }}>
+                  <div style={{ fontWeight: "bold", marginBottom: "4px" }}>보안경 미착용</div>
+                  <div style={{ color: "#666" }}>안경/고글을 쓰지 않은 상태로 감지됨.</div>
+                </div>
+
+                <div style={{ marginBottom: "16px", borderBottom: "1px solid #ddd", paddingBottom: "12px" }}>
+                  <div style={{ fontWeight: "bold", marginBottom: "4px" }}>마스크 미착용</div>
+                  <div style={{ color: "#666" }}>얼굴을 노출하고 있거나 마스크를 잘못 착용한 상태.</div>
+                </div>
+
+                <div style={{ marginBottom: "16px", borderBottom: "1px solid #ddd", paddingBottom: "12px" }}>
+                  <div style={{ fontWeight: "bold", marginBottom: "4px" }}>화재/연기</div>
+                  <div style={{ color: "#666" }}>카메라에 화염이나 연기가 보임 — 즉시 확인 필요 (고위험).</div>
+                </div>
+
+                <div style={{ marginBottom: "16px", borderBottom: "1px solid #ddd", paddingBottom: "12px" }}>
+                  <div style={{ fontWeight: "bold", marginBottom: "4px" }}>쓰러짐 의심</div>
+                  <div style={{ color: "#666" }}>누워있거나 넘어진 사람이 감지됨 — 즉시 확인 필요 (고위험).</div>
+                </div>
+
+                <div style={{ marginBottom: "8px" }}>
+                  <div style={{ fontWeight: "bold", marginBottom: "4px" }}>반팔 착용 / 반바지 착용</div>
+                  <div style={{ color: "#666" }}>화면 정중앙 인원의 옷차림 규정 위반 (긴팔/긴바지 착용 규정).</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       {showLog && (
         <>
           <div className="log-backdrop" onClick={toggleLog} />
