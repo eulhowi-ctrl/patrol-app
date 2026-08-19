@@ -479,7 +479,7 @@ export default function CameraView() {
 
                 <div style={{ marginBottom: "16px", borderBottom: "1px solid #ddd", paddingBottom: "12px" }}>
                   <div style={{ fontWeight: "bold", marginBottom: "4px" }}>안전조끼 미착용</div>
-                  <div style={{ color: "#666" }}>주황·노랑색 조끼를 입지 않은 인원이 감지됨.</div>
+                  <div style={{ color: "#666" }}>형광색·반사색 조끼(노랑, 주황, 빨강, 형광색 등)를 입지 않은 인원이 감지됨.</div>
                 </div>
 
                 <div style={{ marginBottom: "16px", borderBottom: "1px solid #ddd", paddingBottom: "12px" }}>
