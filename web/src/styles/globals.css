@@ -56,3 +56,261 @@ main {
   margin-top: 8px;
   font-size: 13px;
 }
+
+/* 실시간 판정 배너 */
+.verdict-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.verdict-ok {
+  background: #113a22;
+  color: #7fffa8;
+  justify-content: center;
+}
+
+.verdict-warning {
+  background: #4a3510;
+  color: #ffd27f;
+}
+
+.verdict-danger {
+  background: #4a1015;
+  color: #ff9f9f;
+}
+
+.verdict-summary {
+  background: #131c2e;
+  color: #9fc4ff;
+  font-weight: normal;
+  font-size: 13px;
+}
+
+.verdict-ack {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.15);
+  color: inherit;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+/* 수동 캡처 플로팅 버튼 */
+.manual-capture-btn {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  background: #1a2744;
+  color: #e8edf5;
+  font-size: 22px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+/* 순찰 시작/종료 버튼 */
+.patrol-btn {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 14px;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.patrol-btn-start {
+  background: #1f6feb;
+  color: white;
+}
+
+.patrol-btn-stop {
+  background: #c53030;
+  color: white;
+}
+
+/* 수동 캡처 메모 입력 오버레이 */
+.note-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.note-panel {
+  background: #131c2e;
+  border-radius: 12px;
+  padding: 16px;
+  width: 90%;
+  max-width: 400px;
+}
+
+.note-title {
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.note-textarea {
+  width: 100%;
+  background: #0b1220;
+  color: #e8edf5;
+  border: 1px solid #2a3550;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 14px;
+  resize: none;
+}
+
+.note-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.note-cancel,
+.note-save {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.note-cancel {
+  background: #2a3550;
+  color: #e8edf5;
+}
+
+.note-save {
+  background: #1f6feb;
+  color: white;
+}
+
+/* 오늘의 기록 — 왼쪽 화면 탭 + 슬라이드 드로어 */
+.log-tab {
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%) rotate(-90deg);
+  transform-origin: left top;
+  background: #1a2744;
+  color: #e8edf5;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 0 0 8px 8px;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 60;
+  white-space: nowrap;
+}
+
+.log-tab-open {
+  background: #1f6feb;
+}
+
+.log-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 55;
+}
+
+.log-drawer {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: min(320px, 85vw);
+  background: #131c2e;
+  z-index: 56;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.5);
+  animation: slide-in-left 0.2s ease-out;
+}
+
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+.log-drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px;
+  font-weight: bold;
+  border-bottom: 1px solid #2a3550;
+}
+
+.log-close {
+  background: none;
+  border: none;
+  color: #e8edf5;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.log-drawer-list {
+  overflow-y: auto;
+  flex: 1;
+  padding: 8px;
+}
+
+.log-empty {
+  padding: 16px;
+  color: #7a869a;
+  font-size: 13px;
+  text-align: center;
+}
+
+.log-item {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  background: #0b1220;
+}
+
+.log-thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.log-item-body {
+  min-width: 0;
+}
+
+.log-item-time {
+  font-size: 11px;
+  color: #7a869a;
+}
+
+.log-item-labels {
+  font-size: 13px;
+  margin-top: 2px;
+  overflow-wrap: break-word;
+}

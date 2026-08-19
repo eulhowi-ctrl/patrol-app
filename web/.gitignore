@@ -2,3 +2,6 @@ yolov8n.pt
 yolov8n.onnx
 *.onnx
 *.pt
+
+# public/models/ 아래 배포용 모델은 예외 (Cloudflare Pages가 git에서 직접 빌드)
+!public/models/*.onnx
