@@ -1,4 +1,4 @@
-# 직책자 순찰앱 (Safety Patrol App)
+# ARGUS (AI Safety Patrol System)
 
 현장 안전 순찰을 위한 온디바이스 AI 기반 PWA(Progressive Web App)입니다.
 스마트폰 카메라로 현장을 촬영하면 브라우저 내에서 실시간으로 위험 요소를 감지하고,
@@ -131,7 +131,7 @@
 ## 디렉토리 구조
 
 ```
-직책자 순찰앱/
+ARGUS/
 ├── README.md
 ├── .gitignore
 ├── infra/

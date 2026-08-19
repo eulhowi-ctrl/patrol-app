@@ -1,8 +1,8 @@
 {
   "packageId": "com.example.patrolapp",
   "host": "REPLACE_WITH_YOUR_DOMAIN",
-  "name": "직책자 순찰앱",
-  "launcherName": "순찰앱",
+  "name": "ARGUS",
+  "launcherName": "ARGUS",
   "display": "standalone",
   "orientation": "portrait",
   "themeColor": "#0B1220",
