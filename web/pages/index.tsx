@@ -10,13 +10,13 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>직책자 순찰앱</title>
+        <title>ARGUS - AI Safety Patrol System</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#0b1220" />
       </Head>
       <main>
-        <h1>직책자 순찰앱</h1>
+        <h1>ARGUS</h1>
         <CameraView />
       </main>
     </>
