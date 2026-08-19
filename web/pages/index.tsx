@@ -17,6 +17,9 @@ export default function Home() {
       </Head>
       <main>
         <h1>ARGUS</h1>
+        <p style={{ textAlign: "center", fontSize: "14px", color: "#9fc4ff", margin: "0 0 12px 0" }}>
+          AI Safety Patrol System
+        </p>
         <CameraView />
       </main>
     </>
