@@ -4,6 +4,7 @@ import {
   countPending,
   getTodayDetections,
   getAllDetections,
+  cleanupOldSyncedRecords,
   type DetectionRecord,
 } from "../lib/db";
 import { bulkSync, registerSyncListeners } from "../lib/sync";
@@ -65,6 +66,10 @@ export default function CameraView() {
   useEffect(() => {
     setIsOnline(navigator.onLine);
     refreshPendingCount();
+    // 앱 시작 시 오래된 동기화 완료 데이터 정리
+    void cleanupOldSyncedRecords().then((deleted) => {
+      if (deleted > 0) console.log(`[DB] ${deleted}건의 오래된 기록 삭제됨`);
+    });
     registerSyncListeners(() => {
       void bulkSync().then(refreshPendingCount);
     });

@@ -16,10 +16,14 @@ export default function Home() {
         <meta name="theme-color" content="#0b1220" />
       </Head>
       <main>
-        <h1>ARGUS</h1>
-        <p style={{ textAlign: "center", fontSize: "14px", color: "#9fc4ff", margin: "0 0 12px 0" }}>
-          AI Safety Patrol System
-        </p>
+        <div style={{ textAlign: "center", marginBottom: "16px" }}>
+          <h1 style={{ margin: "8px 0 4px 0", fontSize: "32px", fontWeight: "bold", color: "#e8edf5" }}>
+            ARGUS
+          </h1>
+          <p style={{ fontSize: "13px", color: "#7a94c4", margin: "0", letterSpacing: "0.5px", fontWeight: "500" }}>
+            AI Safety Patrol System
+          </p>
+        </div>
         <CameraView />
       </main>
     </>
