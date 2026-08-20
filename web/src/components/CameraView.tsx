@@ -26,6 +26,10 @@ const TAB_DEFAULT_CENTER_OFFSET: TabPositions = { guide: -100, log: 30 }; // 기
 const TAB_DRAG_THRESHOLD_PX = 6;
 const TAB_DRAWER_EDGE = "min(320px, 85vw)"; // .log-drawer 너비와 동일 — 열렸을 때 탭이 서랍 가장자리에 붙도록
 
+// 같은 위반이 화면에 계속 잡혀있는 동안 0.5초마다 스냅샷이 중복 저장되는 것을 방지 —
+// 동일 조합은 이 간격에 한 번만 저장하고, 조합이 바뀌면(새 위반 종류) 즉시 저장한다.
+const DETECTION_SAVE_COOLDOWN_MS = 10000;
+
 interface SessionSummary {
   durationMin: number;
   total: number;
@@ -44,6 +48,8 @@ export default function CameraView() {
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
   const lastSignatureRef = useRef<string>("");
+  const lastSavedSignatureRef = useRef<string>("");
+  const lastSavedAtRef = useRef<number>(0);
 
   const [modelReady, setModelReady] = useState(false);
   const [boxes, setBoxes] = useState<DetectionBox[]>([]);
@@ -220,6 +226,15 @@ export default function CameraView() {
     );
     const cViolations = clothingViolations(clothingResult);
     if (detected.length === 0 && cViolations.length === 0) return;
+
+    const sig = boxesSignature(detected, clothingResult);
+    const now = Date.now();
+    const isNewViolationType = sig !== lastSavedSignatureRef.current;
+    if (!isNewViolationType && now - lastSavedAtRef.current < DETECTION_SAVE_COOLDOWN_MS) {
+      return; // 동일 위반 지속 중 — 쿨다운 동안은 저장 생략(화면 표시는 계속 실시간)
+    }
+    lastSavedSignatureRef.current = sig;
+    lastSavedAtRef.current = now;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
