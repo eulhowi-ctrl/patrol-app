@@ -1,8 +1,11 @@
 # ARGUS (AI Safety Patrol System)
 
-> 🚧 **진행 중인 작업**: 헬멧(no_helmet) 인식률 개선 — 데이터 보강 + 재학습 진행 예정.
-> 새 세션에서는 **[training/HELMET_IMPROVEMENT_PLAN.md](training/HELMET_IMPROVEMENT_PLAN.md)** 파일을
-> 먼저 읽고 "진행 상태" 체크리스트의 다음 미완료 항목부터 이어서 진행할 것.
+> 🚧 **진행 중인 작업** (새 세션에서는 아래 문서를 먼저 읽고 "진행 상태" 체크리스트의
+> 다음 미완료 항목부터 이어서 진행할 것):
+> - 헬멧(no_helmet) 인식률 개선 — 데이터 보강 + 재학습 진행 예정.
+>   **[training/HELMET_IMPROVEMENT_PLAN.md](training/HELMET_IMPROVEMENT_PLAN.md)**
+> - "오늘의 기록" 시간대별 그룹핑 — 기록이 많이 쌓일 때 리스트 성능 개선.
+>   **[web/TODAY_LOG_GROUPING_PLAN.md](web/TODAY_LOG_GROUPING_PLAN.md)**
 
 현장 안전 순찰을 위한 온디바이스 AI 기반 PWA(Progressive Web App)입니다.
 스마트폰 카메라로 현장을 촬영하면 브라우저 내에서 실시간으로 위험 요소를 감지하고,
