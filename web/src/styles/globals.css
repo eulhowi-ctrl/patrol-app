@@ -31,6 +31,16 @@ main {
   flex-wrap: wrap;
 }
 
+.status-back-btn {
+  background: none;
+  border: none;
+  color: #9fc4ff;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 0;
+  cursor: pointer;
+}
+
 .error-banner {
   background: #4a1015;
   color: #ffb4b4;
@@ -299,12 +309,51 @@ main {
   text-align: center;
 }
 
+.log-hour-group {
+  margin-bottom: 6px;
+}
+
+.log-hour-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #182238;
+  cursor: pointer;
+}
+
+.log-hour-caret {
+  color: #7a869a;
+  font-size: 11px;
+  width: 10px;
+}
+
+.log-hour-label {
+  font-weight: bold;
+  font-size: 13px;
+}
+
+.log-hour-count {
+  color: #7a869a;
+  font-size: 12px;
+  margin-left: auto;
+}
+
+.log-hour-badge {
+  background: #4a1f24;
+  color: #ff8a8a;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
 .log-item {
   display: flex;
   gap: 8px;
   padding: 8px;
   border-radius: 8px;
-  margin-bottom: 6px;
+  margin: 6px 0 0 0;
   background: #0b1220;
   cursor: pointer;
 }
@@ -412,4 +461,273 @@ main {
   font-size: 11px;
   color: #7a869a;
   margin-top: 4px;
+}
+
+/* ==================================================================== */
+/* 대시보드 (홈 화면)                                                     */
+/* ==================================================================== */
+
+.dashboard {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.dashboard-header {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.dashboard-title {
+  margin: 8px 0 4px 0;
+  font-size: 32px;
+  font-weight: bold;
+  color: #e8edf5;
+  letter-spacing: 1px;
+}
+
+.dashboard-subtitle {
+  font-size: 13px;
+  color: #7a94c4;
+  margin: 0;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+.stat-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.stat-card {
+  background: #131c2e;
+  border: 1px solid #2a3550;
+  border-radius: 10px;
+  padding: 12px 6px;
+  text-align: center;
+}
+
+.stat-card-danger {
+  border-color: #7a2a30;
+}
+
+.stat-card-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #e8edf5;
+}
+
+.stat-card-danger .stat-card-value {
+  color: #ff9f9f;
+}
+
+.stat-card-label {
+  font-size: 11px;
+  color: #7a869a;
+  margin-top: 4px;
+}
+
+.cta-button {
+  display: block;
+  width: 100%;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, #1f6feb, #1553b3);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 17px;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(31, 111, 235, 0.4);
+}
+
+.dashboard-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: #7a869a;
+  font-size: 13px;
+  background: #131c2e;
+  border-radius: 10px;
+  border: 1px solid #2a3550;
+}
+
+.chart-panel {
+  background: #131c2e;
+  border: 1px solid #2a3550;
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.chart-panel-title {
+  font-size: 13px;
+  font-weight: bold;
+  color: #e8edf5;
+  margin-bottom: 12px;
+}
+
+/* 막대 차트 — 가로형(유형별 목록) */
+.bar-chart-horizontal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bar-row-label {
+  flex: 0 0 auto;
+  width: 110px;
+  font-size: 12px;
+  color: #b8c2d6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar-row-track {
+  flex: 1;
+  height: 10px;
+  background: #0b1220;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.bar-row-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+.bar-row-value {
+  flex: 0 0 auto;
+  width: 36px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: bold;
+  color: #e8edf5;
+}
+
+/* 막대 차트 — 세로형(일자별 추이) */
+.bar-chart-vertical {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 120px;
+}
+
+.bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+}
+
+.bar-col-value {
+  font-size: 11px;
+  color: #7a869a;
+  margin-bottom: 4px;
+}
+
+.bar-col-track {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  background: #0b1220;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bar-col-fill {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  transition: height 0.3s ease;
+}
+
+.bar-col-label {
+  font-size: 10px;
+  color: #7a869a;
+  margin-top: 4px;
+}
+
+/* 도넛(원형) 차트 */
+.donut-chart {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.donut-ring {
+  flex: 0 0 auto;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.donut-center {
+  width: 82px;
+  height: 82px;
+  border-radius: 50%;
+  background: #131c2e;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.donut-center-value {
+  font-size: 20px;
+  font-weight: bold;
+  color: #e8edf5;
+}
+
+.donut-center-label {
+  font-size: 10px;
+  color: #7a869a;
+}
+
+.donut-legend {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.donut-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.donut-legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.donut-legend-label {
+  flex: 1;
+  color: #b8c2d6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.donut-legend-value {
+  font-weight: bold;
+  color: #e8edf5;
 }

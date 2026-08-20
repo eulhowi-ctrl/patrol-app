@@ -59,12 +59,20 @@ export interface ClothingAttributes {
   pantsScore: number;
 }
 
+// clothingViolations()가 반환하는 배지 문구 — 대시보드 색상 매핑 등 다른 모듈에서
+// 문자열을 다시 타이핑하지 않고 이 상수를 참조하도록 export.
+export const CLOTHING_VIOLATION_KO = {
+  harness: "안전그네 미착용",
+  sleeve: "반팔 착용(긴팔 규정)",
+  pants: "반바지 착용(긴바지 규정)",
+} as const;
+
 // ClothingAttributes를 "위반 여부" 관점의 배지 목록으로 변환 — 배너/기록에 표시.
 export function clothingViolations(c: ClothingAttributes | null): string[] {
   if (!c) return [];
   const out: string[] = [];
-  if (!c.harnessWorn) out.push("안전그네 미착용");
-  if (c.sleeve === "short_sleeve") out.push("반팔 착용(긴팔 규정)");
-  if (c.pants === "short_pants") out.push("반바지 착용(긴바지 규정)");
+  if (!c.harnessWorn) out.push(CLOTHING_VIOLATION_KO.harness);
+  if (c.sleeve === "short_sleeve") out.push(CLOTHING_VIOLATION_KO.sleeve);
+  if (c.pants === "short_pants") out.push(CLOTHING_VIOLATION_KO.pants);
   return out;
 }

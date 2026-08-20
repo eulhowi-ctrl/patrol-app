@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import {
   saveDetection,
   countPending,
@@ -15,6 +15,7 @@ import {
   type ClothingAttributes,
   type DetectionBox,
 } from "../lib/labels";
+import { groupRecordsByHour } from "../lib/timeGrouping";
 
 const INFER_INTERVAL_MS = 500; // 저사양 기기 배터리/발열 고려, 초당 2회 추론
 
@@ -42,7 +43,7 @@ function boxesSignature(boxes: DetectionBox[], clothing: ClothingAttributes | nu
   return `${boxSig}|${clothingSig}`;
 }
 
-export default function CameraView() {
+export default function CameraView({ onBack }: { onBack?: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const workerRef = useRef<Worker | null>(null);
@@ -67,6 +68,7 @@ export default function CameraView() {
 
   const [showLog, setShowLog] = useState(false);
   const [todayRecords, setTodayRecords] = useState<DetectionRecord[]>([]);
+  const [expandedHour, setExpandedHour] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const lightboxSwipeRef = useRef<{ pointerId: number; startX: number } | null>(null);
 
@@ -298,12 +300,22 @@ export default function CameraView() {
     setShowLog((prev) => {
       const next = !prev;
       if (next) {
-        void getTodayDetections().then(setTodayRecords);
+        void getTodayDetections().then((records) => {
+          setTodayRecords(records);
+          // 아코디언은 하나만 펼침 — 열 때마다 가장 최근 시간대를 자동으로 펼친 상태로 시작
+          setExpandedHour(groupRecordsByHour(records)[0]?.hourKey ?? null);
+        });
       } else {
         setLightboxIndex(null);
       }
       return next;
     });
+  }, []);
+
+  const hourGroups = useMemo(() => groupRecordsByHour(todayRecords), [todayRecords]);
+
+  const toggleHourGroup = useCallback((hourKey: string) => {
+    setExpandedHour((prev) => (prev === hourKey ? null : hourKey));
   }, []);
 
   // ------------------------------------------------------------------
@@ -467,6 +479,11 @@ export default function CameraView() {
   return (
     <div className="camera-view">
       <div className="status-bar">
+        {onBack && (
+          <button className="status-back-btn" onClick={onBack}>
+            ← 대시보드
+          </button>
+        )}
         <span>{isOnline ? "🟢 온라인" : "🔴 오프라인 (로컬 저장 중)"}</span>
         <span>{modelReady ? "모델 준비 완료" : "모델 로딩 중..."}</span>
         <span>대기 중 동기화: {pendingCount}건</span>
@@ -724,30 +741,56 @@ export default function CameraView() {
               {todayRecords.length === 0 && (
                 <div className="log-empty">오늘 기록된 항목이 없습니다.</div>
               )}
-              {todayRecords.map((r, idx) => (
-                <div
-                  key={r.id}
-                  className="log-item"
-                  onClick={() => setLightboxIndex(idx)}
-                >
-                  {r.snapshotBase64 && (
-                    <img src={r.snapshotBase64} alt="" className="log-thumb" />
-                  )}
-                  <div className="log-item-body">
-                    <div className="log-item-time">
-                      {new Date(r.capturedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
-                      {r.manual && " · 수동 기록"}
-                      {!r.synced && " · 동기화 대기"}
+              {hourGroups.map((group) => {
+                const isExpanded = group.hourKey === expandedHour;
+                return (
+                  <div key={group.hourKey} className="log-hour-group">
+                    <div
+                      className="log-hour-header"
+                      onClick={() => toggleHourGroup(group.hourKey)}
+                    >
+                      <span className="log-hour-caret">{isExpanded ? "▾" : "▸"}</span>
+                      <span className="log-hour-label">{group.hourLabel}</span>
+                      <span className="log-hour-count">{group.records.length}건</span>
+                      {group.highPriorityCount > 0 && (
+                        <span className="log-hour-badge">고위험 {group.highPriorityCount}</span>
+                      )}
                     </div>
-                    <div className="log-item-labels">
-                      {[
-                        ...r.labels.map((b) => LABEL_KO[b.label] ?? b.label),
-                        ...(r.clothingViolations ?? []),
-                      ].join(", ") || r.note || "(내용 없음)"}
-                    </div>
+                    {isExpanded &&
+                      group.records.map((r, i) => {
+                        const idx = group.startIndex + i;
+                        return (
+                          <div
+                            key={r.id}
+                            className="log-item"
+                            onClick={() => setLightboxIndex(idx)}
+                          >
+                            {r.snapshotBase64 && (
+                              <img src={r.snapshotBase64} alt="" className="log-thumb" />
+                            )}
+                            <div className="log-item-body">
+                              <div className="log-item-time">
+                                {new Date(r.capturedAt).toLocaleTimeString("ko-KR", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  timeZone: "Asia/Seoul",
+                                })}
+                                {r.manual && " · 수동 기록"}
+                                {!r.synced && " · 동기화 대기"}
+                              </div>
+                              <div className="log-item-labels">
+                                {[
+                                  ...r.labels.map((b) => LABEL_KO[b.label] ?? b.label),
+                                  ...(r.clothingViolations ?? []),
+                                ].join(", ") || r.note || "(내용 없음)"}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </>
@@ -797,6 +840,7 @@ export default function CameraView() {
               {new Date(todayRecords[lightboxIndex].capturedAt).toLocaleTimeString("ko-KR", {
                 hour: "2-digit",
                 minute: "2-digit",
+                timeZone: "Asia/Seoul",
               })}
               {todayRecords[lightboxIndex].manual && " · 수동 기록"}
               {!todayRecords[lightboxIndex].synced && " · 동기화 대기"}

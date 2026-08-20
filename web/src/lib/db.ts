@@ -1,5 +1,6 @@
 import { openDB, type IDBPDatabase } from "idb";
 import type { DetectionBox } from "./labels";
+import { kstDateKey } from "./kstDate";
 
 export interface DetectionRecord {
   id?: number;
@@ -78,8 +79,8 @@ export async function getAllDetections(): Promise<DetectionRecord[]> {
 
 export async function getTodayDetections(): Promise<DetectionRecord[]> {
   const all = await getAllDetections();
-  const todayKey = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  return all.filter((r) => r.capturedAt.startsWith(todayKey));
+  const todayKey = kstDateKey();
+  return all.filter((r) => kstDateKey(r.capturedAt) === todayKey);
 }
 
 /** 동기화 완료된 3일 이상 오래된 레코드 자동 삭제 (IndexedDB 용량 관리) */

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "test": "ts-node --project tsconfig.json test-harness.ts"
+    "test": "ts-node --project tsconfig.json test-harness.ts && ts-node --project tsconfig.json dashboard-stats-test.ts"
   },
   "devDependencies": {
     "@types/node": "^20.14.9",
