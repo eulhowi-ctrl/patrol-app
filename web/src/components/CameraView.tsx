@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import {
   saveDetection,
   countPending,
@@ -17,6 +17,14 @@ import {
 } from "../lib/labels";
 
 const INFER_INTERVAL_MS = 500; // 저사양 기기 배터리/발열 고려, 초당 2회 추론
+
+// 왼쪽 화면 탭(❓설명 / 📋기록) 세로 드래그 위치 이동
+type TabKey = "guide" | "log";
+type TabPositions = Record<TabKey, number>;
+const TAB_STORAGE_KEY = "patrol-app-tab-positions-v1";
+const TAB_DEFAULT_CENTER_OFFSET: TabPositions = { guide: -100, log: 30 }; // 기존 CSS 기본값(calc(50% ± Npx))과 동일
+const TAB_DRAG_THRESHOLD_PX = 6;
+const TAB_DRAWER_EDGE = "min(320px, 85vw)"; // .log-drawer 너비와 동일 — 열렸을 때 탭이 서랍 가장자리에 붙도록
 
 interface SessionSummary {
   durationMin: number;
@@ -55,6 +63,16 @@ export default function CameraView() {
   const [todayRecords, setTodayRecords] = useState<DetectionRecord[]>([]);
 
   const [showUserGuide, setShowUserGuide] = useState(false);
+
+  const [tabTop, setTabTop] = useState<TabPositions | null>(null);
+  const tabDragRef = useRef<{
+    key: TabKey;
+    pointerId: number;
+    startY: number;
+    startTop: number;
+    moved: boolean;
+  } | null>(null);
+  const suppressTabClickRef = useRef(false);
 
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
@@ -128,6 +146,22 @@ export default function CameraView() {
       }
     }
     void startCamera();
+  }, []);
+
+  // 왼쪽 탭 위치 복원 — 저장된 값이 있으면 사용, 없으면 기존 기본 배치(화면 중앙 기준 오프셋)
+  useEffect(() => {
+    const vh = window.innerHeight;
+    let initial: TabPositions = {
+      guide: vh / 2 + TAB_DEFAULT_CENTER_OFFSET.guide,
+      log: vh / 2 + TAB_DEFAULT_CENTER_OFFSET.log,
+    };
+    try {
+      const saved = localStorage.getItem(TAB_STORAGE_KEY);
+      if (saved) initial = { ...initial, ...JSON.parse(saved) };
+    } catch {
+      // 저장된 값이 손상된 경우 기본 위치 사용
+    }
+    setTabTop(initial);
   }, []);
 
   // 테스트 모드: 더미 감지 결과 표시
@@ -251,6 +285,72 @@ export default function CameraView() {
       }
       return next;
     });
+  }, []);
+
+  // ------------------------------------------------------------------
+  // 왼쪽 탭(❓설명 / 📋기록) 세로 드래그 위치 이동
+  // 짧은 탭은 기존처럼 열기/닫기로 처리하고, 일정 거리 이상 움직이면
+  // 드래그로 간주해 위치만 옮기고 열기/닫기 클릭은 무시한다.
+  // ------------------------------------------------------------------
+  const clampTabTop = useCallback((top: number) => {
+    const margin = 20;
+    const maxTop = Math.max(margin, window.innerHeight - 160);
+    return Math.min(Math.max(top, margin), maxTop);
+  }, []);
+
+  const handleTabPointerDown = useCallback(
+    (key: TabKey) => (e: PointerEvent<HTMLButtonElement>) => {
+      if (!tabTop) return;
+      tabDragRef.current = {
+        key,
+        pointerId: e.pointerId,
+        startY: e.clientY,
+        startTop: tabTop[key],
+        moved: false,
+      };
+      e.currentTarget.setPointerCapture(e.pointerId);
+    },
+    [tabTop]
+  );
+
+  const handleTabPointerMove = useCallback(
+    (e: PointerEvent<HTMLButtonElement>) => {
+      const drag = tabDragRef.current;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      const dy = e.clientY - drag.startY;
+      if (!drag.moved && Math.abs(dy) < TAB_DRAG_THRESHOLD_PX) return;
+      drag.moved = true;
+      const nextTop = clampTabTop(drag.startTop + dy);
+      setTabTop((prev) => (prev ? { ...prev, [drag.key]: nextTop } : prev));
+    },
+    [clampTabTop]
+  );
+
+  const endTabDrag = useCallback((e: PointerEvent<HTMLButtonElement>) => {
+    const drag = tabDragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    tabDragRef.current = null;
+    if (drag.moved) {
+      suppressTabClickRef.current = true;
+      setTabTop((prev) => {
+        if (prev) {
+          try {
+            localStorage.setItem(TAB_STORAGE_KEY, JSON.stringify(prev));
+          } catch {
+            // 저장 실패해도 현재 세션 내 위치는 유지되므로 무시
+          }
+        }
+        return prev;
+      });
+    }
+  }, []);
+
+  const handleTabClick = useCallback((toggle: () => void) => () => {
+    if (suppressTabClickRef.current) {
+      suppressTabClickRef.current = false;
+      return;
+    }
+    toggle();
   }, []);
 
   // ------------------------------------------------------------------
@@ -445,22 +545,38 @@ export default function CameraView() {
         </div>
       )}
 
-      {/* 사용자 설명 — 왼쪽 화면 탭 형식 */}
+      {/* 사용자 설명 — 왼쪽 화면 탭 형식, 세로 드래그로 위치 이동 가능 */}
       <button
         className={`log-tab user-guide-tab ${showUserGuide ? "log-tab-open" : ""}`}
-        onClick={() => setShowUserGuide(!showUserGuide)}
+        onClick={handleTabClick(() => setShowUserGuide(!showUserGuide))}
+        onPointerDown={handleTabPointerDown("guide")}
+        onPointerMove={handleTabPointerMove}
+        onPointerUp={endTabDrag}
+        onPointerCancel={endTabDrag}
         aria-label="사용자 설명"
-        style={{ opacity: showLog ? 0.15 : 1 }}
+        style={{
+          opacity: showLog ? 0.15 : 1,
+          left: showUserGuide || showLog ? TAB_DRAWER_EDGE : 0,
+          ...(tabTop ? { top: `${tabTop.guide}px` } : null),
+        }}
       >
         ❓ 설명
       </button>
 
-      {/* 오늘의 기록 — 왼쪽 화면 탭 형식 */}
+      {/* 오늘의 기록 — 왼쪽 화면 탭 형식, 세로 드래그로 위치 이동 가능 */}
       <button
         className={`log-tab today-log-tab ${showLog ? "log-tab-open" : ""}`}
-        onClick={toggleLog}
+        onClick={handleTabClick(toggleLog)}
+        onPointerDown={handleTabPointerDown("log")}
+        onPointerMove={handleTabPointerMove}
+        onPointerUp={endTabDrag}
+        onPointerCancel={endTabDrag}
         aria-label="오늘의 기록"
-        style={{ opacity: showUserGuide ? 0.15 : 1 }}
+        style={{
+          opacity: showUserGuide ? 0.15 : 1,
+          left: showUserGuide || showLog ? TAB_DRAWER_EDGE : 0,
+          ...(tabTop ? { top: `${tabTop.log}px` } : null),
+        }}
       >
         📋 기록
       </button>

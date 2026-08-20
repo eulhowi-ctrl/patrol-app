@@ -220,18 +220,23 @@ main {
   cursor: pointer;
   z-index: 60;
   white-space: nowrap;
+  touch-action: none; /* 드래그 제스처 중 브라우저 스크롤/줌 간섭 방지 */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  transition: opacity 0.2s ease, left 0.2s ease;
 }
 
+/* top은 CameraView.tsx가 드래그로 저장한 위치를 인라인 style로 덮어씀 —
+   여기 값은 저장된 위치가 없는 최초 진입 시의 기본값 */
 .user-guide-tab {
   top: calc(50% - 100px);
   opacity: 1;
-  transition: opacity 0.2s ease;
 }
 
 .today-log-tab {
   top: calc(50% + 30px);
   opacity: 1;
-  transition: opacity 0.2s ease;
 }
 
 .log-tab-open {
