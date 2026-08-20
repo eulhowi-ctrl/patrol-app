@@ -67,6 +67,8 @@ export default function CameraView() {
 
   const [showLog, setShowLog] = useState(false);
   const [todayRecords, setTodayRecords] = useState<DetectionRecord[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const lightboxSwipeRef = useRef<{ pointerId: number; startX: number } | null>(null);
 
   const [showUserGuide, setShowUserGuide] = useState(false);
 
@@ -297,10 +299,66 @@ export default function CameraView() {
       const next = !prev;
       if (next) {
         void getTodayDetections().then(setTodayRecords);
+      } else {
+        setLightboxIndex(null);
       }
       return next;
     });
   }, []);
+
+  // ------------------------------------------------------------------
+  // 오늘의 기록 — 앨범 뷰어(전체화면 확대 + 좌우 넘기기)
+  // ------------------------------------------------------------------
+  const closeLightbox = useCallback(() => setLightboxIndex(null), []);
+
+  const showPrevRecord = useCallback(() => {
+    setLightboxIndex((idx) => (idx === null ? null : Math.max(0, idx - 1)));
+  }, []);
+
+  const showNextRecord = useCallback(() => {
+    setLightboxIndex((idx) =>
+      idx === null ? null : Math.min(todayRecords.length - 1, idx + 1)
+    );
+  }, [todayRecords.length]);
+
+  const handleLightboxPointerDown = useCallback((e: PointerEvent<HTMLDivElement>) => {
+    lightboxSwipeRef.current = { pointerId: e.pointerId, startX: e.clientX };
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // 일부 브라우저/입력 장치 조합에서 활성 포인터로 인식 못 하는 경우가 있음 — 캡처 없이도 스와이프 감지는 동작함
+    }
+  }, []);
+
+  // 닫기/이전/다음 버튼 클릭이 오버레이의 스와이프 감지로 버블링되는 것을 차단
+  // (안 막으면 버튼 클릭도 pointerdown/up을 거쳐 setPointerCapture 등을 건드리게 됨)
+  const stopPointerPropagation = useCallback((e: PointerEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+  }, []);
+
+  const handleLightboxPointerUp = useCallback(
+    (e: PointerEvent<HTMLDivElement>) => {
+      const swipe = lightboxSwipeRef.current;
+      lightboxSwipeRef.current = null;
+      if (!swipe || swipe.pointerId !== e.pointerId) return;
+      const dx = e.clientX - swipe.startX;
+      const SWIPE_THRESHOLD_PX = 50;
+      if (dx > SWIPE_THRESHOLD_PX) showPrevRecord();
+      else if (dx < -SWIPE_THRESHOLD_PX) showNextRecord();
+    },
+    [showPrevRecord, showNextRecord]
+  );
+
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeLightbox();
+      else if (e.key === "ArrowLeft") showPrevRecord();
+      else if (e.key === "ArrowRight") showNextRecord();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [lightboxIndex, closeLightbox, showPrevRecord, showNextRecord]);
 
   // ------------------------------------------------------------------
   // 왼쪽 탭(❓설명 / 📋기록) 세로 드래그 위치 이동
@@ -323,7 +381,11 @@ export default function CameraView() {
         startTop: tabTop[key],
         moved: false,
       };
-      e.currentTarget.setPointerCapture(e.pointerId);
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        // 일부 브라우저/입력 장치 조합에서 활성 포인터로 인식 못 하는 경우가 있음 — 캡처 없이도 드래그 감지는 동작함
+      }
     },
     [tabTop]
   );
@@ -662,8 +724,12 @@ export default function CameraView() {
               {todayRecords.length === 0 && (
                 <div className="log-empty">오늘 기록된 항목이 없습니다.</div>
               )}
-              {todayRecords.map((r) => (
-                <div key={r.id} className="log-item">
+              {todayRecords.map((r, idx) => (
+                <div
+                  key={r.id}
+                  className="log-item"
+                  onClick={() => setLightboxIndex(idx)}
+                >
                   {r.snapshotBase64 && (
                     <img src={r.snapshotBase64} alt="" className="log-thumb" />
                   )}
@@ -685,6 +751,67 @@ export default function CameraView() {
             </div>
           </div>
         </>
+      )}
+
+      {lightboxIndex !== null && todayRecords[lightboxIndex] && (
+        <div
+          className="lightbox-overlay"
+          onPointerDown={handleLightboxPointerDown}
+          onPointerUp={handleLightboxPointerUp}
+        >
+          <button
+            className="lightbox-close"
+            onClick={closeLightbox}
+            onPointerDown={stopPointerPropagation}
+            aria-label="닫기"
+          >
+            ✕
+          </button>
+          {lightboxIndex > 0 && (
+            <button
+              className="lightbox-nav lightbox-prev"
+              onClick={showPrevRecord}
+              onPointerDown={stopPointerPropagation}
+              aria-label="이전 기록"
+            >
+              ‹
+            </button>
+          )}
+          {lightboxIndex < todayRecords.length - 1 && (
+            <button
+              className="lightbox-nav lightbox-next"
+              onClick={showNextRecord}
+              onPointerDown={stopPointerPropagation}
+              aria-label="다음 기록"
+            >
+              ›
+            </button>
+          )}
+          <img
+            src={todayRecords[lightboxIndex].snapshotBase64}
+            alt=""
+            className="lightbox-image"
+          />
+          <div className="lightbox-caption">
+            <div className="lightbox-caption-time">
+              {new Date(todayRecords[lightboxIndex].capturedAt).toLocaleTimeString("ko-KR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+              {todayRecords[lightboxIndex].manual && " · 수동 기록"}
+              {!todayRecords[lightboxIndex].synced && " · 동기화 대기"}
+            </div>
+            <div className="lightbox-caption-labels">
+              {[
+                ...todayRecords[lightboxIndex].labels.map((b) => LABEL_KO[b.label] ?? b.label),
+                ...(todayRecords[lightboxIndex].clothingViolations ?? []),
+              ].join(", ") || todayRecords[lightboxIndex].note || "(내용 없음)"}
+            </div>
+            <div className="lightbox-caption-index">
+              {lightboxIndex + 1} / {todayRecords.length}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
