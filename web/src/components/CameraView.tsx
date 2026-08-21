@@ -58,6 +58,9 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
   // 이 크기(네이티브 카메라 해상도) 기준이라, viewBox를 여기에 맞춰야 화면에 정확히 겹쳐 그려진다.
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
   const [clothing, setClothing] = useState<ClothingAttributes | null>(null);
+  // 위반이 없을 때 "정상착용" 초록 박스를 그릴 위치 — worker가 옷차림 판정용으로
+  // 이미 찾아낸 사람 위치를 재사용한다 (네이티브 카메라 해상도 좌표, frameSize 기준).
+  const [personBox, setPersonBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [isOnline, setIsOnline] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +122,7 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
       } else if (data.type === "result") {
         setBoxes(data.boxes);
         setClothing(data.clothing);
+        setPersonBox(data.personBox);
         handleDetectionResult(data.boxes, data.clothing);
       }
     };
@@ -608,6 +612,36 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
                 </span>
               </div>
             ))}
+
+          {frameSize.width > 0 && frameSize.height > 0 && !hasAnyIssue && personBox && (
+            <div
+              style={{
+                position: "absolute",
+                left: `${(personBox.x / frameSize.width) * 100}%`,
+                top: `${(personBox.y / frameSize.height) * 100}%`,
+                width: `${(personBox.width / frameSize.width) * 100}%`,
+                height: `${(personBox.height / frameSize.height) * 100}%`,
+                border: "2px solid #22c55e",
+              }}
+            >
+              <span
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  bottom: "100%",
+                  background: "#22c55e",
+                  color: "white",
+                  fontSize: "11px",
+                  fontFamily: "Arial",
+                  fontWeight: "bold",
+                  padding: "1px 4px",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                정상착용
+              </span>
+            </div>
+          )}
         </div>
 
         {/* 수동 캡처 버튼 (플로팅) */}

@@ -62,6 +62,9 @@ type WorkerResponse =
       requestId: number;
       boxes: DetectionBox[];
       clothing: ClothingAttributes | null;
+      // 위반이 하나도 없을 때 "정상착용" 초록 박스를 그리기 위한 사람 위치.
+      // classifyClothing()이 옷차림 판정용으로 이미 계산하는 박스를 재사용한다.
+      personBox: SimpleBox | null;
     };
 
 interface PlainImage {
@@ -250,9 +253,15 @@ function detectMostCentralPerson(
   return candidates[0];
 }
 
-async function classifyClothing(image: PlainImage): Promise<ClothingAttributes | null> {
-  if (!harnessSession && !sleeveSession && !pantsSession) return null;
-  if (!personSession || !personSession.inputNames) return null;
+interface ClothingResult {
+  attributes: ClothingAttributes | null;
+  // 위반이 없을 때 "정상착용" 초록 박스를 그리는 데도 재사용되므로, attributes가
+  // null이어도(분류기 못 불러옴 등) 사람 위치를 찾았으면 그대로 반환한다.
+  personBox: SimpleBox | null;
+}
+
+async function classifyClothing(image: PlainImage): Promise<ClothingResult> {
+  if (!personSession || !personSession.inputNames) return { attributes: null, personBox: null };
 
   const { tensor: personTensor, scaleX, scaleY } = letterboxToTensor(image, MODEL_INPUT_SIZE);
   const inputName = personSession.inputNames[0];
@@ -261,7 +270,9 @@ async function classifyClothing(image: PlainImage): Promise<ClothingAttributes |
   const personBox = detectMostCentralPerson(
     outputs[outputName], scaleX, scaleY, image.width, image.height
   );
-  if (!personBox) return null; // 사람이 안 보이면 옷차림 판정 자체를 생략 (배경만 잘못 판정하는 것 방지)
+  if (!personBox) return { attributes: null, personBox: null }; // 사람이 안 보이면 옷차림 판정 자체를 생략 (배경만 잘못 판정하는 것 방지)
+
+  if (!harnessSession && !sleeveSession && !pantsSession) return { attributes: null, personBox };
 
   const crop = cropImage(image, padBox(personBox, image.width, image.height));
   const tensor = toClassifierTensor(crop);
@@ -271,17 +282,20 @@ async function classifyClothing(image: PlainImage): Promise<ClothingAttributes |
     runClassifier(sleeveSession, tensor),
     runClassifier(pantsSession, tensor),
   ]);
-  if (!harnessProbs && !sleeveProbs && !pantsProbs) return null;
+  if (!harnessProbs && !sleeveProbs && !pantsProbs) return { attributes: null, personBox };
 
   // 인덱스 규약(training/build_harness_crops.py, build_clothing_crops.py):
   // harness 0=미착용 1=착용, sleeve 0=반팔 1=긴팔, pants 0=반바지 1=긴바지
   return {
-    harnessWorn: (harnessProbs?.[1] ?? 1) >= 0.5,
-    harnessScore: harnessProbs ? Math.max(...harnessProbs) : 0,
-    sleeve: (sleeveProbs?.[1] ?? 1) >= 0.5 ? "long_sleeve" : "short_sleeve",
-    sleeveScore: sleeveProbs ? Math.max(...sleeveProbs) : 0,
-    pants: (pantsProbs?.[1] ?? 1) >= 0.5 ? "long_pants" : "short_pants",
-    pantsScore: pantsProbs ? Math.max(...pantsProbs) : 0,
+    attributes: {
+      harnessWorn: (harnessProbs?.[1] ?? 1) >= 0.5,
+      harnessScore: harnessProbs ? Math.max(...harnessProbs) : 0,
+      sleeve: (sleeveProbs?.[1] ?? 1) >= 0.5 ? "long_sleeve" : "short_sleeve",
+      sleeveScore: sleeveProbs ? Math.max(...sleeveProbs) : 0,
+      pants: (pantsProbs?.[1] ?? 1) >= 0.5 ? "long_pants" : "short_pants",
+      pantsScore: pantsProbs ? Math.max(...pantsProbs) : 0,
+    },
+    personBox,
   };
 }
 
@@ -395,6 +409,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
           requestId: msg.requestId,
           boxes: [],
           clothing: null,
+          personBox: null,
         } satisfies WorkerResponse);
         return;
       }
@@ -404,13 +419,14 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       const outputs = await session.run({ [inputName]: tensor });
       const outputName = session.outputNames[0];
       const boxes = postprocess(outputs[outputName], scaleX, scaleY);
-      const clothing = await classifyClothing(msg.imageData);
+      const { attributes: clothing, personBox } = await classifyClothing(msg.imageData);
 
       self.postMessage({
         type: "result",
         requestId: msg.requestId,
         boxes,
         clothing,
+        personBox,
       } satisfies WorkerResponse);
     } catch (err) {
       self.postMessage({
