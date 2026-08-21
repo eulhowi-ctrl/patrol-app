@@ -54,6 +54,9 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
 
   const [modelReady, setModelReady] = useState(false);
   const [boxes, setBoxes] = useState<DetectionBox[]>([]);
+  // 감지 박스 SVG 오버레이의 viewBox 기준 — worker가 반환하는 box 좌표는 항상
+  // 이 크기(네이티브 카메라 해상도) 기준이라, viewBox를 여기에 맞춰야 화면에 정확히 겹쳐 그려진다.
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
   const [clothing, setClothing] = useState<ClothingAttributes | null>(null);
   const [isOnline, setIsOnline] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
@@ -184,6 +187,7 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
       { label: "no_vest", score: 0.78, x: 150, y: 200, width: 110, height: 160 },
     ];
     setBoxes(testBoxes);
+    setFrameSize({ width: 400, height: 400 }); // 실제 카메라가 없으니 더미 박스 좌표 스케일에 맞춘 기준 크기
     setModelReady(true);
   }, [isTestMode]);
 
@@ -543,11 +547,24 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
       )}
 
       <div style={{ position: "relative", width: "100%" }}>
-        <video ref={videoRef} muted playsInline className="camera-video" />
+        <video
+          ref={videoRef}
+          muted
+          playsInline
+          className="camera-video"
+          onLoadedMetadata={() => {
+            const video = videoRef.current;
+            if (video) setFrameSize({ width: video.videoWidth, height: video.videoHeight });
+          }}
+        />
         <canvas ref={canvasRef} className="camera-canvas" />
 
-        {/* 감지 박스 오버레이 */}
-        <svg
+        {/* 감지 박스 오버레이 — worker가 반환하는 box 좌표는 네이티브 카메라 해상도(frameSize)
+            기준이라, 화면에 표시된 비디오 크기(%) 기준으로 환산해서 위치/크기를 잡는다.
+            (SVG viewBox로 좌표계를 맞추면 stroke/글자 크기까지 네이티브 해상도 비율로 같이
+            줄어들어 너무 작아지므로, 테두리 두께·글자 크기가 항상 고정 CSS px로 보이도록
+            percentage 기반 HTML 오버레이로 그린다.) */}
+        <div
           style={{
             position: "absolute",
             top: 0,
@@ -555,40 +572,43 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
             width: "100%",
             height: "100%",
             borderRadius: "8px",
-            pointerEvents: "none"
+            overflow: "hidden",
+            pointerEvents: "none",
           }}
         >
-          {boxes.map((box, idx) => (
-            <g key={idx}>
-              <rect
-                x={box.x}
-                y={box.y}
-                width={box.width}
-                height={box.height}
-                fill="none"
-                stroke="#ff4444"
-                strokeWidth="2"
-              />
-              <rect
-                x={box.x}
-                y={Math.max(0, box.y - 20)}
-                width={Math.max(80, box.label.length * 6)}
-                height="18"
-                fill="#ff4444"
-              />
-              <text
-                x={box.x + 2}
-                y={Math.max(12, box.y - 4)}
-                fill="white"
-                fontSize="11"
-                fontFamily="Arial"
-                fontWeight="bold"
+          {frameSize.width > 0 &&
+            frameSize.height > 0 &&
+            boxes.map((box, idx) => (
+              <div
+                key={idx}
+                style={{
+                  position: "absolute",
+                  left: `${(box.x / frameSize.width) * 100}%`,
+                  top: `${(box.y / frameSize.height) * 100}%`,
+                  width: `${(box.width / frameSize.width) * 100}%`,
+                  height: `${(box.height / frameSize.height) * 100}%`,
+                  border: "2px solid #ff4444",
+                }}
               >
-                {box.label} {(box.score * 100).toFixed(0)}%
-              </text>
-            </g>
-          ))}
-        </svg>
+                <span
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    bottom: "100%",
+                    background: "#ff4444",
+                    color: "white",
+                    fontSize: "11px",
+                    fontFamily: "Arial",
+                    fontWeight: "bold",
+                    padding: "1px 4px",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {box.label} {(box.score * 100).toFixed(0)}%
+                </span>
+              </div>
+            ))}
+        </div>
 
         {/* 수동 캡처 버튼 (플로팅) */}
         <button className="manual-capture-btn" onClick={openNote} title="수동으로 지금 상황 기록">

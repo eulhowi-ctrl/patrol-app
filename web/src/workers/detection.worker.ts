@@ -1,5 +1,10 @@
 /// <reference lib="webworker" />
-import { DETECTION_LABELS, type ClothingAttributes, type DetectionBox } from "../lib/labels";
+import {
+  DETECTION_LABELS,
+  type ClothingAttributes,
+  type DetectionBox,
+  type DetectionLabel,
+} from "../lib/labels";
 
 // 메인 스레드를 막지 않도록 추론을 전용 Web Worker에서 수행한다.
 declare const self: DedicatedWorkerGlobalScope;
@@ -15,6 +20,17 @@ importScripts("/ort/ort.wasm.min.js");
 const MODEL_INPUT_SIZE = 256; // training/train.py --imgsz 256 (YOLOv8 Nano 기본 640이 아님)
 const SCORE_THRESHOLD = 0.45;
 const IOU_THRESHOLD = 0.45;
+
+// fire_smoke는 학습 데이터가 적고(fire+smoke를 한 클래스로 병합) 오탐(밝은 조명/따뜻한 색조를
+// 화재로 오인)이 잦다고 보고됨 — 근본 해결(데이터 보강 재학습)은 별도 과제이고, 그 전까지는
+// 이 클래스만 더 높은 확신도를 요구해 오탐을 줄인다.
+const CLASS_SCORE_THRESHOLD: Partial<Record<DetectionLabel, number>> = {
+  fire_smoke: 0.75,
+};
+
+function thresholdFor(label: DetectionLabel): number {
+  return CLASS_SCORE_THRESHOLD[label] ?? SCORE_THRESHOLD;
+}
 
 // person.onnx는 COCO 사전학습 YOLOv8n(80클래스, person=class 0) 그대로 사용 —
 // 2단계 분류기(harness/sleeve/pants) 입력을 person 크롭으로 만들기 위한 용도.
@@ -324,7 +340,7 @@ function postprocess(
       }
     }
 
-    if (bestScore < SCORE_THRESHOLD || bestClass === -1) continue;
+    if (bestClass === -1 || bestScore < thresholdFor(DETECTION_LABELS[bestClass])) continue;
 
     const cx = data[0 * numAnchors + i] * scaleX;
     const cy = data[1 * numAnchors + i] * scaleY;
