@@ -10,7 +10,9 @@
   `no_helmet, no_vest, no_safety_glasses, no_mask, fire_smoke, man_down` (6클래스).
   `training/merge_datasets.py`의 `TARGET_CLASSES`도 같은 순서로 유지할 것.
 - 학습: `training/merge_datasets.py`로 공개 데이터셋 병합 → `training/train.py`로
-  파인튜닝(imgsz=256, CPU) → ONNX export.
+  파인튜닝(imgsz=384, epochs=40, CPU) → ONNX export.
+- 2026-08-25: `patrol_detector_v2` 런으로 교체 (no_helmet 데이터 보강 + imgsz 256→384,
+  epochs 20→40). mAP50 0.29 → 0.676. 상세: `training/HELMET_IMPROVEMENT_PLAN.md`.
 - INT8/FP16 양자화는 선택 사항 — 모바일 추론 속도가 부족하면 추가 적용.
 
 ## person.onnx — 사람 위치 탐지 (COCO 사전학습 YOLOv8n, 재학습 없이 그대로 사용)

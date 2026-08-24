@@ -17,7 +17,8 @@ import type { InferenceSession, Tensor } from "onnxruntime-web";
 declare const ort: typeof import("onnxruntime-web");
 importScripts("/ort/ort.wasm.min.js");
 
-const MODEL_INPUT_SIZE = 256; // training/train.py --imgsz 256 (YOLOv8 Nano 기본 640이 아님)
+const DETECTOR_INPUT_SIZE = 384; // training/train.py --imgsz 384 (patrol_detector_v2, 2026-08-25 교체)
+const PERSON_INPUT_SIZE = 256; // person.onnx는 별도 모델(yolov8n.pt, imgsz=256) — 재학습 대상 아님, 그대로 유지
 const SCORE_THRESHOLD = 0.45;
 const IOU_THRESHOLD = 0.45;
 
@@ -263,7 +264,7 @@ interface ClothingResult {
 async function classifyClothing(image: PlainImage): Promise<ClothingResult> {
   if (!personSession || !personSession.inputNames) return { attributes: null, personBox: null };
 
-  const { tensor: personTensor, scaleX, scaleY } = letterboxToTensor(image, MODEL_INPUT_SIZE);
+  const { tensor: personTensor, scaleX, scaleY } = letterboxToTensor(image, PERSON_INPUT_SIZE);
   const inputName = personSession.inputNames[0];
   const outputs = await personSession.run({ [inputName]: personTensor });
   const outputName = personSession.outputNames[0];
@@ -414,7 +415,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         return;
       }
 
-      const { tensor, scaleX, scaleY } = letterboxToTensor(msg.imageData, MODEL_INPUT_SIZE);
+      const { tensor, scaleX, scaleY } = letterboxToTensor(msg.imageData, DETECTOR_INPUT_SIZE);
       const inputName = session.inputNames[0];
       const outputs = await session.run({ [inputName]: tensor });
       const outputName = session.outputNames[0];
