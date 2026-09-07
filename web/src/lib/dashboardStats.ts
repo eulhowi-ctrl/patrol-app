@@ -1,21 +1,21 @@
 import type { DetectionRecord } from "./db";
-import { HIGH_PRIORITY_LABELS, LABEL_KO, CLOTHING_VIOLATION_KO } from "./labels";
+import { HIGH_PRIORITY_LABELS, LABEL_COLOR, LABEL_KO, CLOTHING_VIOLATION_KO } from "./labels";
 import { kstDateKey } from "./kstDate";
 import type { BarDatum, DonutDatum } from "./chartTypes";
 
-const HIGH_PRIORITY_COLOR = "#f56565";
 const OTHER_COLOR = "#7a869a";
 
 // 위반 유형별 고정 색상 — "오늘 처음 등장한 순서"가 아니라 라벨 자체에 색을 고정한다.
 // 이렇게 해야 날짜가 바뀌어도(오늘은 파랑이던 유형이 내일은 다른 색이 되는 일 없이)
-// 같은 위반 유형은 항상 같은 색으로 보인다.
+// 같은 위반 유형은 항상 같은 색으로 보인다. 1단계 탐지 라벨은 labels.ts의 LABEL_COLOR를
+// 그대로 재사용해서 카메라 오버레이와 대시보드 차트의 색이 항상 일치하도록 한다.
 const VIOLATION_COLORS: Record<string, string> = {
-  [LABEL_KO.no_helmet]: "#1f6feb",
-  [LABEL_KO.no_vest]: "#63b3ed",
-  [LABEL_KO.no_safety_glasses]: "#4fd1c5",
-  [LABEL_KO.no_mask]: "#68d391",
-  [LABEL_KO.fire_smoke]: HIGH_PRIORITY_COLOR,
-  [LABEL_KO.man_down]: "#e53e3e",
+  [LABEL_KO.no_helmet]: LABEL_COLOR.no_helmet,
+  [LABEL_KO.no_vest]: LABEL_COLOR.no_vest,
+  [LABEL_KO.no_safety_glasses]: LABEL_COLOR.no_safety_glasses,
+  [LABEL_KO.no_mask]: LABEL_COLOR.no_mask,
+  [LABEL_KO.fire_smoke]: LABEL_COLOR.fire_smoke,
+  [LABEL_KO.man_down]: LABEL_COLOR.man_down,
   [CLOTHING_VIOLATION_KO.harness]: "#b794f4",
   [CLOTHING_VIOLATION_KO.sleeve]: "#f6ad55",
   [CLOTHING_VIOLATION_KO.pants]: "#f687b3",

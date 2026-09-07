@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import {
   saveDetection,
   countPending,
@@ -10,7 +10,9 @@ import {
 import { bulkSync, registerSyncListeners } from "../lib/sync";
 import {
   HIGH_PRIORITY_LABELS,
+  LABEL_COLOR,
   LABEL_KO,
+  PERSON_OK_COLOR,
   clothingViolations,
   type ClothingAttributes,
   type DetectionBox,
@@ -35,6 +37,75 @@ interface SessionSummary {
   durationMin: number;
   total: number;
   byLabel: Record<string, number>;
+}
+
+// 클래스별 배지 배경색 대비 텍스트 색상을 자동 선택 — 밝은 배경(주황/스카이블루 등)엔
+// 검은 글자, 어두운 배경(빨강/보라 등)엔 흰 글자를 써서 항상 가독성을 확보한다.
+function readableTextColor(hex: string): string {
+  const clean = hex.replace("#", "");
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+  return brightness > 150 ? "#000000" : "#ffffff";
+}
+
+const CORNER_SIZE = 14;
+const CORNER_THICKNESS = 3;
+
+function CornerBracket({ corner, color }: { corner: "tl" | "tr" | "bl" | "br"; color: string }) {
+  const base: CSSProperties = { position: "absolute", width: CORNER_SIZE, height: CORNER_SIZE };
+  const edge = `${CORNER_THICKNESS}px solid ${color}`;
+  const byCorner: Record<typeof corner, CSSProperties> = {
+    tl: { ...base, top: -1, left: -1, borderTop: edge, borderLeft: edge },
+    tr: { ...base, top: -1, right: -1, borderTop: edge, borderRight: edge },
+    bl: { ...base, bottom: -1, left: -1, borderBottom: edge, borderLeft: edge },
+    br: { ...base, bottom: -1, right: -1, borderBottom: edge, borderRight: edge },
+  };
+  return <div style={byCorner[corner]} />;
+}
+
+// 모서리 브래킷만 두껍게 강조된 "테크니컬" 스타일 바운딩 박스. 클래스별로 다른 색을
+// 받아 화면에 여러 위반이 동시에 잡혀도 종류를 즉시 구분할 수 있게 한다.
+function TechCornerBox({
+  left,
+  top,
+  width,
+  height,
+  color,
+  label,
+}: {
+  left: string;
+  top: string;
+  width: string;
+  height: string;
+  color: string;
+  label: string;
+}) {
+  return (
+    <div style={{ position: "absolute", left, top, width, height, border: `1px solid ${color}88` }}>
+      <CornerBracket corner="tl" color={color} />
+      <CornerBracket corner="tr" color={color} />
+      <CornerBracket corner="bl" color={color} />
+      <CornerBracket corner="br" color={color} />
+      <span
+        style={{
+          position: "absolute",
+          left: 0,
+          bottom: "100%",
+          background: color,
+          color: readableTextColor(color),
+          fontSize: "11px",
+          fontFamily: "Arial",
+          fontWeight: "bold",
+          padding: "1px 4px",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label}
+      </span>
+    </div>
+  );
 }
 
 function boxesSignature(boxes: DetectionBox[], clothing: ClothingAttributes | null): string {
@@ -583,64 +654,26 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
           {frameSize.width > 0 &&
             frameSize.height > 0 &&
             boxes.map((box, idx) => (
-              <div
+              <TechCornerBox
                 key={idx}
-                style={{
-                  position: "absolute",
-                  left: `${(box.x / frameSize.width) * 100}%`,
-                  top: `${(box.y / frameSize.height) * 100}%`,
-                  width: `${(box.width / frameSize.width) * 100}%`,
-                  height: `${(box.height / frameSize.height) * 100}%`,
-                  border: "2px solid #ff4444",
-                }}
-              >
-                <span
-                  style={{
-                    position: "absolute",
-                    left: 0,
-                    bottom: "100%",
-                    background: "#ff4444",
-                    color: "white",
-                    fontSize: "11px",
-                    fontFamily: "Arial",
-                    fontWeight: "bold",
-                    padding: "1px 4px",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {box.label} {(box.score * 100).toFixed(0)}%
-                </span>
-              </div>
+                left={`${(box.x / frameSize.width) * 100}%`}
+                top={`${(box.y / frameSize.height) * 100}%`}
+                width={`${(box.width / frameSize.width) * 100}%`}
+                height={`${(box.height / frameSize.height) * 100}%`}
+                color={LABEL_COLOR[box.label] ?? "#ff5555"}
+                label={`${LABEL_KO[box.label] ?? box.label} ${(box.score * 100).toFixed(0)}%`}
+              />
             ))}
 
           {frameSize.width > 0 && frameSize.height > 0 && !hasAnyIssue && personBox && (
-            <div
-              style={{
-                position: "absolute",
-                left: `${(personBox.x / frameSize.width) * 100}%`,
-                top: `${(personBox.y / frameSize.height) * 100}%`,
-                width: `${(personBox.width / frameSize.width) * 100}%`,
-                height: `${(personBox.height / frameSize.height) * 100}%`,
-                border: "2px solid #22c55e",
-              }}
-            >
-              <span
-                style={{
-                  position: "absolute",
-                  left: 0,
-                  bottom: "100%",
-                  background: "#22c55e",
-                  color: "white",
-                  fontSize: "11px",
-                  fontFamily: "Arial",
-                  fontWeight: "bold",
-                  padding: "1px 4px",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                정상착용
-              </span>
-            </div>
+            <TechCornerBox
+              left={`${(personBox.x / frameSize.width) * 100}%`}
+              top={`${(personBox.y / frameSize.height) * 100}%`}
+              width={`${(personBox.width / frameSize.width) * 100}%`}
+              height={`${(personBox.height / frameSize.height) * 100}%`}
+              color={PERSON_OK_COLOR}
+              label="정상착용"
+            />
           )}
         </div>
 
