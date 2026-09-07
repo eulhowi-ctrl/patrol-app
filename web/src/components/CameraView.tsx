@@ -118,10 +118,14 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const workerRef = useRef<Worker | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const requestIdRef = useRef(0);
   const lastSignatureRef = useRef<string>("");
   const lastSavedSignatureRef = useRef<string>("");
   const lastSavedAtRef = useRef<number>(0);
+
+  // 후면(순찰 대상 촬영)/전면(본인 PPE 셀프 점검) 카메라 전환.
+  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
 
   const [modelReady, setModelReady] = useState(false);
   const [boxes, setBoxes] = useState<DetectionBox[]>([]);
@@ -216,24 +220,53 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" },
+          video: { facingMode },
           audio: false,
         });
+        if (cancelled) {
+          // 전환 도중 컴포넌트가 언마운트되었거나 facingMode가 또 바뀐 경우 —
+          // 이미 화면에 반영되지 않을 스트림이니 바로 트랙을 정지해 카메라를 점유하지 않는다.
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        // 이전 카메라(후면/전면) 스트림은 새 스트림이 잡힌 뒤에 정지해야 전환 중 화면이 끊기지 않는다.
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
         }
+        setError(null);
       } catch (err) {
+        if (cancelled) return;
         setError(
-          "카메라 접근이 거부되었습니다. 브라우저 설정에서 카메라 권한을 허용해주세요."
+          facingMode === "user"
+            ? "전면 카메라에 접근할 수 없습니다. 기기에 전면 카메라가 없거나 권한이 거부되었습니다."
+            : "카메라 접근이 거부되었습니다. 브라우저 설정에서 카메라 권한을 허용해주세요."
         );
         console.error(err);
       }
     }
     void startCamera();
+    return () => {
+      cancelled = true;
+    };
+  }, [facingMode]);
+
+  // 컴포넌트 언마운트 시 카메라 점유 해제 (페이지 이탈 후에도 카메라 표시등이 켜져 있는 문제 방지)
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  // 순찰(후면) ↔ 본인 PPE 점검(전면) 카메라 전환
+  const toggleFacingMode = useCallback(() => {
+    setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
   }, []);
 
   // 왼쪽 탭 위치 복원 — 저장된 값이 있으면 사용, 없으면 기존 기본 배치(화면 중앙 기준 오프셋)
@@ -566,6 +599,7 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
         <span>{isOnline ? "🟢 온라인" : "🔴 오프라인 (로컬 저장 중)"}</span>
         <span>{modelReady ? "모델 준비 완료" : "모델 로딩 중..."}</span>
         <span>대기 중 동기화: {pendingCount}건</span>
+        {facingMode === "user" && <span>🤳 본인 점검 모드</span>}
       </div>
 
       {isTestMode && (
@@ -632,7 +666,14 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
             if (video) setFrameSize({ width: video.videoWidth, height: video.videoHeight });
           }}
         />
-        <canvas ref={canvasRef} className="camera-canvas" />
+        {/* 전면 카메라(본인 점검 모드)일 때는 좌우 반전해서 거울처럼 보여준다 — 실제 촬영
+            프레임(모델 추론 입력, 저장되는 스냅샷)은 반전하지 않고, 화면 표시만 CSS로 뒤집는다.
+            감지 박스 오버레이도 같은 비율(percentage) 좌표계라 함께 뒤집어도 위치가 어긋나지 않는다. */}
+        <canvas
+          ref={canvasRef}
+          className="camera-canvas"
+          style={facingMode === "user" ? { transform: "scaleX(-1)" } : undefined}
+        />
 
         {/* 감지 박스 오버레이 — worker가 반환하는 box 좌표는 네이티브 카메라 해상도(frameSize)
             기준이라, 화면에 표시된 비디오 크기(%) 기준으로 환산해서 위치/크기를 잡는다.
@@ -649,6 +690,7 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
             borderRadius: "8px",
             overflow: "hidden",
             pointerEvents: "none",
+            transform: facingMode === "user" ? "scaleX(-1)" : undefined,
           }}
         >
           {frameSize.width > 0 &&
@@ -676,6 +718,15 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
             />
           )}
         </div>
+
+        {/* 카메라 전환 버튼 (플로팅) — 순찰(후면) ↔ 본인 PPE 점검(전면) */}
+        <button
+          className="camera-switch-btn"
+          onClick={toggleFacingMode}
+          title={facingMode === "environment" ? "전면 카메라로 전환 (본인 점검)" : "후면 카메라로 전환 (순찰)"}
+        >
+          🔄
+        </button>
 
         {/* 수동 캡처 버튼 (플로팅) */}
         <button className="manual-capture-btn" onClick={openNote} title="수동으로 지금 상황 기록">
@@ -771,6 +822,11 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
             </div>
             <div className="log-drawer-list" style={{ lineHeight: "1.6" }}>
               <div style={{ padding: "12px", fontSize: "13px" }}>
+                <div style={{ marginBottom: "16px", borderBottom: "1px solid #ddd", paddingBottom: "12px" }}>
+                  <div style={{ fontWeight: "bold", marginBottom: "4px" }}>🔄 카메라 전환</div>
+                  <div style={{ color: "#666" }}>화면 왼쪽 아래 버튼으로 후면(순찰용)과 전면(본인 PPE 점검용) 카메라를 전환할 수 있습니다. 전면 카메라에서는 화면이 거울처럼 좌우 반전되어 보입니다.</div>
+                </div>
+
                 <div style={{ marginBottom: "16px", borderBottom: "1px solid #ddd", paddingBottom: "12px" }}>
                   <div style={{ fontWeight: "bold", marginBottom: "4px" }}>% (신뢰도)</div>
                   <div style={{ color: "#666" }}>카메라에서 감지된 내용을 모델이 확신하는 정도 (0~100%). 높을수록 정확한 감지입니다.</div>
