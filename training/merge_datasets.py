@@ -9,6 +9,11 @@
   화재/연기 (YOLO 포맷, split 없음 → 자체 분할)
 - Simuletic/CCTV_Incident_Dataset_Fall_Lying_Down_Detection (CC-BY-4.0): 쓰러짐
   (YOLO-pose 포맷 — bbox 4개 값만 쓰고 keypoint는 버림, split 없음 → 자체 분할)
+- Voxel51/hard-hat-detection (CC0-1.0): 헬멧 미착용(no_helmet) 보강용.
+  FiftyOne 포맷(samples.json, bounding_box=[x,y,w,h] 상대좌표 0~1, 좌상단 기준),
+  "head"(맨머리=미착용)만 사용, "helmet"(착용)/"person"(모호)은 제외.
+  ※ njvisionpower/SHWD는 GitHub 저장소에 데모 이미지만 있고 실제 라벨 데이터는
+  Baidu/Google Drive 외부 링크로만 제공되어(프로그래밍 다운로드 불가) 제외함.
 
 최종 클래스(순서가 web/src/lib/labels.ts의 DETECTION_LABELS와 반드시 일치해야 함):
   0 no_helmet, 1 no_vest, 2 no_safety_glasses, 3 no_mask, 4 fire_smoke, 5 man_down
@@ -18,6 +23,7 @@
 """
 from __future__ import annotations
 
+import json
 import random
 import shutil
 import xml.etree.ElementTree as ET
@@ -192,6 +198,85 @@ def convert_fall():
     print("man_down ->", counts)
 
 
+# ---------------------------------------------------------------------------
+# 5) Voxel51 hard-hat-detection — FiftyOne samples.json, "head"만 no_helmet으로
+#    사용(맨머리=미착용). 분할 없음 → 자체 80/10/10 분할
+# ---------------------------------------------------------------------------
+def convert_hardhat():
+    base = RAW / "hard-hat-detection"
+    samples_path = base / "samples.json"
+    if not samples_path.exists():
+        print("hard-hat-detection: samples.json 없음 — 건너뜀")
+        return
+    samples = json.loads(samples_path.read_text(encoding="utf-8"))["samples"]
+    items = [s for s in samples if (base / s["filepath"]).exists()]
+    splits = _random_split(items)
+    counts = {c: 0 for c in TARGET_CLASSES}
+    for split, split_items in splits.items():
+        for sample in split_items:
+            img = base / sample["filepath"]
+            lines = []
+            for det in (sample.get("ground_truth") or {}).get("detections") or []:
+                if det.get("label") != "head":  # helmet(착용)/person(모호)은 제외
+                    continue
+                x, y, w, h = det["bounding_box"]
+                cx, cy = min(max(x + w / 2, 0.0), 1.0), min(max(y + h / 2, 0.0), 1.0)
+                bw, bh = min(max(w, 0.0), 1.0), min(max(h, 0.0), 1.0)
+                lines.append(f"{NO_HELMET} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}")
+                counts[TARGET_CLASSES[NO_HELMET]] += 1
+            _write_pair(split, img, "hardhat", lines)
+    print("hard-hat-detection ->", counts)
+
+
+# ---------------------------------------------------------------------------
+# 6) SHEL5K — 헬멧 미착용(Head) 보강용. YOLO txt 포맷, train/val 분할 있음
+#    클래스 인덱싱: Helmet(0), Head(1)=맨머리=미착용만 사용
+# ---------------------------------------------------------------------------
+def convert_shel5k():
+    base = RAW / "SHEL5K"
+    if not base.exists():
+        print("SHEL5K: 디렉토리 없음 — 건너뜀")
+        return
+
+    # 일반적인 SHEL5K 구조: train/, val/ 또는 images/, annotations/
+    splits_to_check = [
+        ("train", base / "train" / "images", base / "train" / "labels"),
+        ("val", base / "val" / "images", base / "val" / "labels"),
+        ("val", base / "images", base / "labels"),  # 대체 구조
+    ]
+
+    counts = {c: 0 for c in TARGET_CLASSES}
+
+    for out_split, img_dir, lbl_dir in splits_to_check:
+        if not img_dir.exists() or not lbl_dir.exists():
+            continue
+
+        for img in sorted(img_dir.iterdir()):
+            if img.suffix.lower() not in (".jpg", ".jpeg", ".png"):
+                continue
+
+            lbl = lbl_dir / f"{img.stem}.txt"
+            lines = []
+
+            if lbl.exists():
+                for line in lbl.read_text().splitlines():
+                    parts = line.split()
+                    if not parts:
+                        continue
+                    cls = int(parts[0])
+                    # cls=1: Head (맨머리=미착용), cls=0: Helmet(착용) 무시
+                    if cls == 1:  # Head = no_helmet
+                        lines.append(f"{NO_HELMET} {' '.join(parts[1:5])}")
+                        counts[TARGET_CLASSES[NO_HELMET]] += 1
+
+            _write_pair(out_split, img, "shel5k", lines)
+
+    if counts[TARGET_CLASSES[NO_HELMET]] > 0:
+        print("SHEL5K ->", counts)
+    else:
+        print("SHEL5K: no_helmet 샘플 없음 — 건너뜀")
+
+
 def write_data_yaml():
     names = "\n".join(f"  {i}: {name}" for i, name in enumerate(TARGET_CLASSES))
     (OUT / "data.yaml").write_text(
@@ -211,6 +296,8 @@ if __name__ == "__main__":
     convert_mask()
     convert_fire()
     convert_fall()
+    convert_hardhat()
+    convert_shel5k()  # ← SHEL5K 추가 (다운로드 후 사용)
     write_data_yaml()
     for split in ("train", "val", "test"):
         n = len(list((OUT / split / "images").iterdir()))
