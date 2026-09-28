@@ -65,3 +65,13 @@ training/sleeve_crops/
 training/pants_crops/
 training/runs/
 yolov8n.pt
+
+# 학습 세션 운영 스크립트/찌꺼기 — 특정 학습 1회용으로 급조되어 하드코딩된 날짜/경로가
+# 있어 재사용 불가. 다음 학습 때는 새로 작성할 것.
+training/*.pid
+training/*.nohup
+training/notify_when_done.sh
+training/swap_to_scheduled.sh
+training/train_watchdog.sh
+training/process_shel5k.py
+/runs/
