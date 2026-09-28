@@ -31,6 +31,20 @@ export const LABEL_KO: Record<DetectionLabel, string> = {
   man_down: "쓰러짐 의심",
 };
 
+// 클래스별 박스/배지 색상 — 카메라 화면에 여러 위반이 동시에 잡힐 때 종류를
+// 한눈에 구분하도록 한다. dashboardStats.ts의 VIOLATION_COLORS와 동일한 값을 써서
+// 대시보드 차트와 카메라 오버레이에서 같은 위반 유형이 항상 같은 색으로 보이게 한다.
+export const LABEL_COLOR: Record<DetectionLabel, string> = {
+  no_helmet: "#1f6feb",
+  no_vest: "#63b3ed",
+  no_safety_glasses: "#4fd1c5",
+  no_mask: "#68d391",
+  fire_smoke: "#f56565",
+  man_down: "#e53e3e",
+};
+
+export const PERSON_OK_COLOR = "#22c55e";
+
 export interface DetectionBox {
   label: DetectionLabel;
   score: number;

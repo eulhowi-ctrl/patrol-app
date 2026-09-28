@@ -130,6 +130,22 @@ main {
   cursor: pointer;
 }
 
+/* 카메라 전환 플로팅 버튼 (순찰용 후면 ↔ 본인 점검용 전면) */
+.camera-switch-btn {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  background: #1a2744;
+  color: #e8edf5;
+  font-size: 22px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
 /* 순찰 시작/종료 버튼 */
 .patrol-btn {
   display: block;
