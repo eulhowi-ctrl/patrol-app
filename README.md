@@ -100,6 +100,7 @@
 | 화재/불꽃 | `fire_smoke` | 카메라 스트림 내 화재 징후 (고위험, 즉시 알림) | 1단계 YOLO |
 | 쓰러짐(Man-Down) | `man_down` | 쓰러진 자세의 인체 감지 (고위험, 즉시 알림) | 1단계 YOLO |
 | 반팔/반바지 착용 | `sleeve`/`pants` (`ClothingAttributes`) | 긴팔·긴바지 규정 위반 감지 | 2단계 보조 분류기 (person 크롭 입력) |
+| 차량 근접 | `vehicle_proximity` (`DERIVED_LABELS`) | 트럭·승용차·버스·오토바이 바로 옆에 선 사람 감지. 단안 카메라라 실제 거리 대신 박스 위치(발 위치가 차량 좌우 범위 안 + 차량 바닥과 같은 깊이)로 근사 — `web/src/lib/vehicleProximity.ts`. 굴착기·지게차는 COCO 클래스가 아니라 truck으로 잡힐 때만 감지 | person.onnx(COCO) 재사용, 재학습 없음 |
 
 미포함: 위험지역 진입(현장마다 다른 좌표라 시각적 학습 불가 — person 탐지 + 앱 내 구역
 겹침 판정으로 별도 구현 필요), 안전그네·안전화 미착용(공개 데이터셋 없음).

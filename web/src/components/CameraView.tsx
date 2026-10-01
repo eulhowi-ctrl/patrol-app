@@ -888,6 +888,11 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
                   <div style={{ color: "#666" }}>누워있거나 넘어진 사람이 감지됨 — 즉시 확인 필요 (고위험).</div>
                 </div>
 
+                <div style={{ marginBottom: "16px", borderBottom: "1px solid #ddd", paddingBottom: "12px" }}>
+                  <div style={{ fontWeight: "bold", marginBottom: "4px" }}>차량 근접</div>
+                  <div style={{ color: "#666" }}>트럭·승용차·버스 바로 옆에 사람이 서 있음. 화면상 위치로 추정하는 것이라 실제 거리와 다를 수 있고, 굴착기·지게차 등 건설장비는 트럭으로 인식될 때만 감지됩니다.</div>
+                </div>
+
                 <div style={{ marginBottom: "8px" }}>
                   <div style={{ fontWeight: "bold", marginBottom: "4px" }}>반팔 착용 / 반바지 착용</div>
                   <div style={{ color: "#666" }}>화면 정중앙 인원의 옷차림 규정 위반 (긴팔/긴바지 착용 규정).</div>

@@ -71,6 +71,14 @@ function main() {
     assert(result.length === 1 && result[0].score === 0.9, "최신 프레임의 score/좌표가 사용됨");
   }
 
+  console.log("=== 같은 라벨이 여러 명에게 잡히면 박스를 모두 유지한다 ===");
+  {
+    const smoother = createDetectionSmoother({ windowSize: 3, minVotes: 2 });
+    smoother.update([mkBox("no_helmet"), mkBox("no_helmet")]);
+    const result = smoother.update([mkBox("no_helmet"), mkBox("no_helmet")]);
+    assert(result.length === 2, "두 명 모두 미착용이면 박스 2개가 그대로 나옴");
+  }
+
   console.log("=== reset()은 과거 이력을 비운다 ===");
   {
     const smoother = createDetectionSmoother({ windowSize: 3, minVotes: 2 });

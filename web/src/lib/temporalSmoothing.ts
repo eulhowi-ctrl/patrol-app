@@ -41,14 +41,15 @@ export function createDetectionSmoother(options: TemporalSmoothingOptions): Dete
 
     // 확정된 라벨만 통과시키고, 박스 좌표/신뢰도는 그 라벨이 가장 최근에 등장했던
     // 프레임 값을 사용한다 — 바로 이번 프레임엔 없어도 최근 프레임 값을 잠깐
-    // 유지해서(최대 windowSize프레임) 박스가 깜빡이지 않게 한다.
+    // 유지해서(최대 windowSize프레임) 박스가 깜빡이지 않게 한다. 같은 라벨이 여러
+    // 명에게 잡혔으면 그 프레임의 박스를 모두 유지한다.
     const confirmed: DetectionBox[] = [];
     for (const [label, count] of votes) {
       if (count < minVotes) continue;
       for (let i = history.length - 1; i >= 0; i--) {
-        const match = history[i].find((b) => b.label === label);
-        if (match) {
-          confirmed.push(match);
+        const matches = history[i].filter((b) => b.label === label);
+        if (matches.length > 0) {
+          confirmed.push(...matches);
           break;
         }
       }

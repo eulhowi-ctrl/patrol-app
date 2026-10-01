@@ -16,7 +16,14 @@ export const DETECTION_LABELS = [
   "man_down",
 ] as const;
 
-export type DetectionLabel = (typeof DETECTION_LABELS)[number];
+// 모델 클래스가 아니라 여러 탐지 결과를 조합해 판정하는 라벨 — detector.onnx 출력
+// 인덱스와 무관하므로 DETECTION_LABELS에 넣으면 안 된다.
+// - vehicle_proximity: person.onnx(COCO)의 사람/차량 박스 위치 관계로 판정 (vehicleProximity.ts)
+export const DERIVED_LABELS = ["vehicle_proximity"] as const;
+
+export type DetectionLabel =
+  | (typeof DETECTION_LABELS)[number]
+  | (typeof DERIVED_LABELS)[number];
 
 // man_down / fire_smoke는 즉시 알림이 필요한 고위험 이벤트로 분류한다.
 export const HIGH_PRIORITY_LABELS: DetectionLabel[] = ["fire_smoke", "man_down"];
@@ -29,6 +36,7 @@ export const LABEL_KO: Record<DetectionLabel, string> = {
   no_mask: "마스크 미착용",
   fire_smoke: "화재/연기",
   man_down: "쓰러짐 의심",
+  vehicle_proximity: "차량 근접",
 };
 
 // 클래스별 박스/배지 색상 — 카메라 화면에 여러 위반이 동시에 잡힐 때 종류를
@@ -41,6 +49,7 @@ export const LABEL_COLOR: Record<DetectionLabel, string> = {
   no_mask: "#68d391",
   fire_smoke: "#f56565",
   man_down: "#e53e3e",
+  vehicle_proximity: "#ecc94b",
 };
 
 export const PERSON_OK_COLOR = "#22c55e";

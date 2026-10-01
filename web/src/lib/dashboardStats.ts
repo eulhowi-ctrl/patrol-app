@@ -16,6 +16,7 @@ const VIOLATION_COLORS: Record<string, string> = {
   [LABEL_KO.no_mask]: LABEL_COLOR.no_mask,
   [LABEL_KO.fire_smoke]: LABEL_COLOR.fire_smoke,
   [LABEL_KO.man_down]: LABEL_COLOR.man_down,
+  [LABEL_KO.vehicle_proximity]: LABEL_COLOR.vehicle_proximity,
   [CLOTHING_VIOLATION_KO.harness]: "#b794f4",
   [CLOTHING_VIOLATION_KO.sleeve]: "#f6ad55",
   [CLOTHING_VIOLATION_KO.pants]: "#f687b3",

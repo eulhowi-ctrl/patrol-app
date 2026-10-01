@@ -5,6 +5,7 @@ import {
   type DetectionBox,
   type DetectionLabel,
 } from "../lib/labels";
+import { findPersonsNearVehicles, type Rect } from "../lib/vehicleProximity";
 
 // 메인 스레드를 막지 않도록 추론을 전용 Web Worker에서 수행한다.
 declare const self: DedicatedWorkerGlobalScope;
@@ -34,10 +35,13 @@ function thresholdFor(label: DetectionLabel): number {
 }
 
 // person.onnx는 COCO 사전학습 YOLOv8n(80클래스, person=class 0) 그대로 사용 —
-// 2단계 분류기(harness/sleeve/pants) 입력을 person 크롭으로 만들기 위한 용도.
-// 우리 6클래스 탐지기(detector.onnx)에는 person 클래스가 없어서 별도로 둠.
+// 2단계 분류기(harness/sleeve/pants) 입력을 person 크롭으로 만들고, 같은 출력의 차량
+// 클래스로 사람-차량 근접(vehicle_proximity)도 판정한다 (재학습 불필요).
+// 우리 6클래스 탐지기(detector.onnx)에는 person/차량 클래스가 없어서 별도로 둠.
 const PERSON_CLASS_INDEX = 0;
+const COCO_VEHICLE_CLASS_INDICES = new Set([2, 3, 5, 7]); // car, motorcycle, bus, truck
 const PERSON_SCORE_THRESHOLD = 0.5;
+const VEHICLE_SCORE_THRESHOLD = 0.5;
 const PERSON_CROP_PADDING = 0.15; // 사람 박스 상하좌우로 15% 여유 (분류기 학습 크롭과 유사하게)
 
 // 2단계 보조 분류기(harness/sleeve/pants) 입력 크기 — training/train_classifier.py 기본값
@@ -217,41 +221,61 @@ async function runClassifier(
   }
 }
 
-/** person.onnx(COCO YOLOv8n) 출력에서 person(class 0) 박스만 추출, 화면 정중앙에 가장 가까운 사람 하나 선택. */
-function detectMostCentralPerson(
-  output: Tensor,
-  scaleX: number,
-  scaleY: number,
-  frameWidth: number,
-  frameHeight: number
-): SimpleBox | null {
-  const data = output.data as Float32Array;
-  const [, , numAnchors] = output.dims as number[];
+interface CocoDetections {
+  persons: SimpleBox[];
+  vehicles: SimpleBox[];
+}
 
-  const candidates: SimpleBox[] = [];
+/** person.onnx(COCO YOLOv8n) 출력에서 사람/차량 박스를 추출한다 (앵커별 최고 점수 클래스 기준 + NMS). */
+function parseCocoDetections(output: Tensor, scaleX: number, scaleY: number): CocoDetections {
+  const data = output.data as Float32Array;
+  const [, channels, numAnchors] = output.dims as number[];
+  const numClasses = channels - 4;
+
+  const persons: SimpleBox[] = [];
+  const vehicles: SimpleBox[] = [];
   for (let i = 0; i < numAnchors; i++) {
-    const score = data[(4 + PERSON_CLASS_INDEX) * numAnchors + i];
-    if (score < PERSON_SCORE_THRESHOLD) continue;
+    let bestClass = -1;
+    let bestScore = 0;
+    for (let c = 0; c < numClasses; c++) {
+      const score = data[(4 + c) * numAnchors + i];
+      if (score > bestScore) {
+        bestScore = score;
+        bestClass = c;
+      }
+    }
+
+    const isPerson = bestClass === PERSON_CLASS_INDEX && bestScore >= PERSON_SCORE_THRESHOLD;
+    const isVehicle = COCO_VEHICLE_CLASS_INDICES.has(bestClass) && bestScore >= VEHICLE_SCORE_THRESHOLD;
+    if (!isPerson && !isVehicle) continue;
 
     const cx = data[0 * numAnchors + i] * scaleX;
     const cy = data[1 * numAnchors + i] * scaleY;
     const w = data[2 * numAnchors + i] * scaleX;
     const h = data[3 * numAnchors + i] * scaleY;
-    candidates.push({ x: cx - w / 2, y: cy - h / 2, width: w, height: h, score });
+    const box = { x: cx - w / 2, y: cy - h / 2, width: w, height: h, score: bestScore };
+    (isPerson ? persons : vehicles).push(box);
   }
-  if (candidates.length === 0) return null;
+  return { persons: nonMaxSuppression(persons), vehicles: nonMaxSuppression(vehicles) };
+}
 
-  // 여러 사람이 있으면 화면 정중앙에 가장 가까이 있는 사람 하나만 판정한다
-  // (다인원 개별 판정은 추후 개선 여지 — labels.ts ClothingAttributes 주석 참고).
+async function detectCocoObjects(image: PlainImage): Promise<CocoDetections | null> {
+  if (!personSession || !personSession.inputNames) return null;
+  const { tensor, scaleX, scaleY } = letterboxToTensor(image, PERSON_INPUT_SIZE);
+  const inputName = personSession.inputNames[0];
+  const outputs = await personSession.run({ [inputName]: tensor });
+  return parseCocoDetections(outputs[personSession.outputNames[0]], scaleX, scaleY);
+}
+
+// 여러 사람이 있으면 화면 정중앙에 가장 가까이 있는 사람 하나만 옷차림 판정한다
+// (다인원 개별 판정은 추후 개선 여지 — labels.ts ClothingAttributes 주석 참고).
+function pickMostCentral(boxes: SimpleBox[], frameWidth: number, frameHeight: number): SimpleBox | null {
+  if (boxes.length === 0) return null;
   const centerX = frameWidth / 2;
   const centerY = frameHeight / 2;
-  const distanceToCenter = (b: SimpleBox) => {
-    const bx = b.x + b.width / 2;
-    const by = b.y + b.height / 2;
-    return Math.hypot(bx - centerX, by - centerY);
-  };
-  candidates.sort((a, b) => distanceToCenter(a) - distanceToCenter(b));
-  return candidates[0];
+  const distanceToCenter = (b: SimpleBox) =>
+    Math.hypot(b.x + b.width / 2 - centerX, b.y + b.height / 2 - centerY);
+  return [...boxes].sort((a, b) => distanceToCenter(a) - distanceToCenter(b))[0];
 }
 
 interface ClothingResult {
@@ -261,16 +285,7 @@ interface ClothingResult {
   personBox: SimpleBox | null;
 }
 
-async function classifyClothing(image: PlainImage): Promise<ClothingResult> {
-  if (!personSession || !personSession.inputNames) return { attributes: null, personBox: null };
-
-  const { tensor: personTensor, scaleX, scaleY } = letterboxToTensor(image, PERSON_INPUT_SIZE);
-  const inputName = personSession.inputNames[0];
-  const outputs = await personSession.run({ [inputName]: personTensor });
-  const outputName = personSession.outputNames[0];
-  const personBox = detectMostCentralPerson(
-    outputs[outputName], scaleX, scaleY, image.width, image.height
-  );
+async function classifyClothing(image: PlainImage, personBox: SimpleBox | null): Promise<ClothingResult> {
   if (!personBox) return { attributes: null, personBox: null }; // 사람이 안 보이면 옷차림 판정 자체를 생략 (배경만 잘못 판정하는 것 방지)
 
   if (!harnessSession && !sleeveSession && !pantsSession) return { attributes: null, personBox };
@@ -300,7 +315,7 @@ async function classifyClothing(image: PlainImage): Promise<ClothingResult> {
   };
 }
 
-function iou(a: DetectionBox, b: DetectionBox): number {
+function iou(a: Rect, b: Rect): number {
   const x1 = Math.max(a.x, b.x);
   const y1 = Math.max(a.y, b.y);
   const x2 = Math.min(a.x + a.width, b.x + b.width);
@@ -310,13 +325,16 @@ function iou(a: DetectionBox, b: DetectionBox): number {
   return unionArea <= 0 ? 0 : interArea / unionArea;
 }
 
-function nonMaxSuppression(boxes: DetectionBox[]): DetectionBox[] {
+function nonMaxSuppression<T extends Rect & { score: number }>(
+  boxes: T[],
+  sameClass: (a: T, b: T) => boolean = () => true
+): T[] {
   const sorted = [...boxes].sort((a, b) => b.score - a.score);
-  const kept: DetectionBox[] = [];
+  const kept: T[] = [];
 
   for (const candidate of sorted) {
     const overlaps = kept.some(
-      (k) => k.label === candidate.label && iou(k, candidate) > IOU_THRESHOLD
+      (k) => sameClass(k, candidate) && iou(k, candidate) > IOU_THRESHOLD
     );
     if (!overlaps) kept.push(candidate);
   }
@@ -372,7 +390,7 @@ function postprocess(
     });
   }
 
-  return nonMaxSuppression(boxes);
+  return nonMaxSuppression(boxes, (a, b) => a.label === b.label);
 }
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
@@ -420,12 +438,24 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       const outputs = await session.run({ [inputName]: tensor });
       const outputName = session.outputNames[0];
       const boxes = postprocess(outputs[outputName], scaleX, scaleY);
-      const { attributes: clothing, personBox } = await classifyClothing(msg.imageData);
+
+      const coco = await detectCocoObjects(msg.imageData);
+      const proximityBoxes: DetectionBox[] = coco
+        ? findPersonsNearVehicles(coco.persons, coco.vehicles).map(({ score, ...rect }) => ({
+            label: "vehicle_proximity",
+            score,
+            ...rect,
+          }))
+        : [];
+      const centralPerson = coco
+        ? pickMostCentral(coco.persons, msg.imageData.width, msg.imageData.height)
+        : null;
+      const { attributes: clothing, personBox } = await classifyClothing(msg.imageData, centralPerson);
 
       self.postMessage({
         type: "result",
         requestId: msg.requestId,
-        boxes,
+        boxes: [...boxes, ...proximityBoxes],
         clothing,
         personBox,
       } satisfies WorkerResponse);
