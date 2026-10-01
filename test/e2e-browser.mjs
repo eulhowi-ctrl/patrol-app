@@ -3,8 +3,9 @@ import http from "node:http";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 
-const WEB = "http://localhost:3000";
-const API = "http://127.0.0.1:8787";
+const WEB = process.env.WEB ?? "http://localhost:3000";
+const API = process.env.API ?? "http://127.0.0.1:8787";
+const PROD = !!process.env.PROD; // 운영 서버 대상: Telegram 모킹/웹훅 단계 생략
 
 const calls = [];
 const mock = http.createServer((req, res) => {
@@ -17,7 +18,7 @@ const mock = http.createServer((req, res) => {
     res.end(JSON.stringify({ ok: true, result: {} }));
   });
 });
-await new Promise((r) => mock.listen(8899, r));
+if (!PROD) await new Promise((r) => mock.listen(8899, r));
 
 const api = async (path, { method = "GET", body, user } = {}) => {
   const headers = { "Content-Type": "application/json" };
@@ -39,7 +40,7 @@ try {
   const user = await api("/api/users", { method: "POST" });
   const { site } = await api("/api/sites", { method: "POST", user, body: { name: "브라우저 테스트 발전소" } });
   const link = await api("/api/me/telegram-link", { method: "POST", user });
-  await fetch(API + "/api/telegram/webhook", {
+  if (!PROD) await fetch(API + "/api/telegram/webhook", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-telegram-bot-api-secret-token": "s3cret" },
     body: JSON.stringify({ message: { chat: { id: 777, type: "private" }, text: "/start " + link.token } }),
@@ -85,9 +86,11 @@ try {
   await st.getByRole("button", { name: /테스트 알림/ }).click();
   await mo.waitForSelector(".mt-tile.alert", { timeout: 10000 });
   log("위반 보고 → 모니터링 칸이 실시간으로 빨간 경고");
-  for (let i = 0; i < 40 && !calls.some((c) => c.method === "sendPhoto"); i++) await new Promise((r) => setTimeout(r, 100));
-  assert.ok(calls.some((c) => c.method === "sendPhoto" && c.raw.includes("777")), "Telegram 사진 알림 미수신");
-  log("구독자에게 Telegram 사진 알림 도착");
+  if (!PROD) {
+    for (let i = 0; i < 40 && !calls.some((c) => c.method === "sendPhoto"); i++) await new Promise((r) => setTimeout(r, 100));
+    assert.ok(calls.some((c) => c.method === "sendPhoto" && c.raw.includes("777")), "Telegram 사진 알림 미수신");
+    log("구독자에게 Telegram 사진 알림 도착");
+  }
 
   // ── 라이브 ──
   await mo.locator(".mt-tile").first().click();
@@ -107,7 +110,7 @@ try {
   console.error("\n✗ 실패:", e.message);
 } finally {
   await browser.close();
-  mock.close();
+  if (!PROD) mock.close();
   if (failed) process.exitCode = 1;
   else console.log("\n브라우저 E2E 통과");
 }
