@@ -12,6 +12,10 @@ services:
       - PORT=3000
     env_file:
       - ../web/.env
+    # 웹 푸시 구독 목록(web/src/lib/server/pushStore.ts)이 /app/data에 파일로 저장된다 —
+    # 볼륨 없이 재배포하면 컨테이너와 함께 사라지므로 이름 있는 볼륨에 마운트해 보존한다.
+    volumes:
+      - patrol-data:/app/data
     # 1GB RAM 인스턴스 보호: 컨테이너 메모리 상한선 지정 (OOM Killer 대비)
     deploy:
       resources:
@@ -22,3 +26,6 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+volumes:
+  patrol-data:

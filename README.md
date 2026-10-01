@@ -103,6 +103,27 @@
 미포함: 위험지역 진입(현장마다 다른 좌표라 시각적 학습 불가 — person 탐지 + 앱 내 구역
 겹침 판정으로 별도 구현 필요), 안전그네·안전화 미착용(공개 데이터셋 없음).
 
+## 외부 알림 (웹 푸시)
+
+화재/연기·쓰러짐 같은 고위험 이벤트는 순찰자 본인 화면에만 배너로 떠서는 의미가 작다
+(특히 혼자 순찰 중 쓰러진 경우, 본인은 알림을 볼 수 없다). 그래서 별도 기기(관리자 등)를
+고위험 알림 수신 대상으로 등록해두면, 어떤 기기에서 감지되든 서버가 웹 푸시로 즉시 전달한다.
+
+- **구독**: 대시보드 화면의 "🔔 이 기기로 위험 알림 받기" 버튼 (`web/src/components/Dashboard.tsx`) —
+  브라우저 알림 권한을 요청하고 `web/src/lib/pushClient.ts`가 구독 정보를 서버에 등록한다.
+- **발송 트리거**: `CameraView.tsx`가 `fire_smoke`/`man_down`을 감지하면(동일 위반 지속 중엔
+  기존 10초 쿨다운을 그대로 공유) `web/pages/api/push/notify.ts`를 호출하고, 서버가 등록된
+  모든 구독에 `web-push` 라이브러리로 알림을 보낸다.
+- **저장소**: 구독 목록은 `web/src/lib/server/pushStore.ts`가 `web/data/push-subscriptions.json`
+  파일에 저장한다 — 단일 인스턴스를 전제로 한 최소 구현이며, Docker 배포 시
+  `infra/docker-compose.yml`의 `patrol-data` 볼륨에 마운트해 컨테이너 재배포에도 보존한다.
+- **설정**: `npm run generate-vapid-keys`로 VAPID 키 쌍을 생성해 `web/.env`의
+  `NEXT_PUBLIC_VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`에 채워 넣어야 동작한다
+  (키가 없으면 알림 발송 없이 조용히 비활성화됨 — 핵심 감지/기록 기능에는 영향 없음).
+- **제약**: Cloudflare Pages 정적 배포(`npm run build:cloudflare`)는 `pages/api` 전체를
+  빌드에서 제외하므로 이 경로에서는 외부 알림 기능을 쓸 수 없다 (Oracle Cloud/Docker 배포
+  전용). iOS Safari는 홈 화면에 추가한 PWA에서만 웹 푸시를 지원한다.
+
 ## 기술 스택
 
 - **프론트엔드**: Next.js(Pages Router) + TypeScript, `next-pwa`, `onnxruntime-web`(wasm), `idb`
@@ -248,6 +269,8 @@ bash scripts/deploy-and-push.sh
 | Play Console에서 "도메인 소유권 확인 실패" | `assetlinks.json`의 지문(fingerprint)이 실제 서명 키와 불일치 | `android/build-android.sh` 실행 후 갱신된 `web/public/.well-known/assetlinks.json`을 서버에 재배포 |
 | 오프라인에서 저장한 로그가 온라인 전환 후에도 안 올라감 | Background Sync 미지원 브라우저(iOS Safari 등) | `sync.ts`는 `online` 이벤트로도 폴백 동작하므로 앱을 다시 포그라운드로 가져오면 동기화됨 |
 | `npm test` 실행 시 `fake-indexeddb`를 찾을 수 없음 | `test/` 디렉토리에 별도 `node_modules` 미설치 | `cd test && npm install` 먼저 실행 |
+| 고위험 이벤트가 감지돼도 외부 알림이 안 옴 | `web/.env`에 VAPID 키가 설정 안 됨, 또는 어느 기기도 구독하지 않음, 또는 Cloudflare 정적 배포(API 없음) | `npm run generate-vapid-keys`로 키 생성 후 `.env`에 설정, 대시보드에서 "🔔 이 기기로 위험 알림 받기"로 구독, Oracle/Docker 배포인지 확인 |
+| iOS에서 알림 구독 버튼이 "지원하지 않음"으로 뜸 | iOS Safari는 일반 브라우저 탭에서 웹 푸시를 지원하지 않음 | 공유 → "홈 화면에 추가"로 설치한 PWA에서 실행 (iOS 16.4+) |
 
 ---
 

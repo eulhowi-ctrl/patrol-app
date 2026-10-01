@@ -559,6 +559,42 @@ main {
   box-shadow: 0 4px 14px rgba(31, 111, 235, 0.4);
 }
 
+.push-toggle-btn {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 4px;
+  background: #131c2e;
+  color: #e8edf5;
+  border: 1px solid #2a3550;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.push-toggle-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.push-unsupported-hint {
+  padding: 10px 12px;
+  margin-bottom: 4px;
+  background: #1a1f2e;
+  color: #7a869a;
+  border-radius: 10px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.push-hint-text {
+  margin: 0 0 16px;
+  font-size: 11px;
+  color: #7a869a;
+  text-align: center;
+}
+
 .dashboard-empty {
   padding: 24px 16px;
   text-align: center;

@@ -16,8 +16,10 @@ import {
   clothingViolations,
   type ClothingAttributes,
   type DetectionBox,
+  type DetectionLabel,
 } from "../lib/labels";
 import { groupRecordsByHour } from "../lib/timeGrouping";
+import { notifyHighPriority } from "../lib/pushClient";
 
 const INFER_INTERVAL_MS = 500; // 저사양 기기 배터리/발열 고려, 초당 2회 추론
 
@@ -370,6 +372,14 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
 
     if (highPriority.length > 0) {
       console.warn("[ALERT] 고위험 이벤트 감지:", highPriority);
+      // 화재/쓰러짐처럼 본인이 혼자 있을 때 가장 필요한 알림은 이 화면만 봐서는 소용없으므로,
+      // 외부 알림을 구독해둔 기기(관리자 등)로 서버를 통해 즉시 전달한다.
+      const notifiedLabels = new Set<DetectionLabel>();
+      for (const b of highPriority) {
+        if (notifiedLabels.has(b.label)) continue;
+        notifiedLabels.add(b.label);
+        notifyHighPriority(b.label);
+      }
     }
   }, [refreshPendingCount]);
 
