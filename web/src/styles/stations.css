@@ -1,0 +1,470 @@
+/* 스테이션 · 모니터링 화면 (st- = 공용/스테이션, mt- = 모니터링, lv- = 라이브, home- = 시작 화면) */
+
+main.main-full {
+  padding: 0;
+}
+
+.st-page {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 12px 4px 32px;
+}
+
+.st-muted {
+  color: #8a97ad;
+  font-size: 13px;
+}
+
+.st-error {
+  color: #ff8a8a;
+  font-size: 13px;
+}
+
+.st-label {
+  display: block;
+  margin: 14px 0 6px;
+  font-size: 13px;
+  color: #b8c3d6;
+}
+
+.st-input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px;
+  border-radius: 8px;
+  border: 1px solid #2a3753;
+  background: #0f1829;
+  color: #e8edf5;
+  font-size: 15px;
+}
+
+.st-code {
+  letter-spacing: 3px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.st-code-inline {
+  letter-spacing: 2px;
+  color: #e8edf5;
+}
+
+.st-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.st-btn {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #2f3e5e;
+  background: #17233b;
+  color: #e8edf5;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.st-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.st-primary {
+  background: #1f6feb;
+  border-color: #1f6feb;
+  color: #fff;
+}
+
+.st-danger {
+  border-color: #7a2f35;
+  color: #ff9aa2;
+}
+
+.st-link {
+  background: none;
+  border: none;
+  color: #9fc4ff;
+  font-size: 14px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.st-chip {
+  min-width: 32px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #2a3753;
+  background: #111b2f;
+  color: #b8c3d6;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.st-chip.on {
+  background: #1f6feb;
+  border-color: #1f6feb;
+  color: #fff;
+}
+
+.st-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 14px;
+}
+
+/* ── 시작 화면 ── */
+.home-title {
+  margin: 8px 0 4px;
+  letter-spacing: 4px;
+}
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 16px;
+  text-align: left;
+  border-radius: 12px;
+  border: 1px solid #25324d;
+  background: #131c2e;
+  color: #e8edf5;
+  cursor: pointer;
+}
+
+.home-card strong {
+  font-size: 17px;
+}
+
+.home-card span {
+  font-size: 13px;
+  color: #8a97ad;
+}
+
+/* ── 스테이션 ── */
+.st-root {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  overflow: hidden;
+}
+
+.st-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.st-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.st-zone,
+.st-zone-hit {
+  position: absolute;
+  pointer-events: none;
+}
+
+.st-zone-hit {
+  pointer-events: auto;
+  cursor: crosshair;
+  outline: 2px dashed rgba(245, 101, 101, 0.7);
+}
+
+.st-zone-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.st-pt {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: #f56565;
+  border: 2px solid #fff;
+}
+
+.st-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  font-size: 13px;
+  background: linear-gradient(rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0));
+}
+
+.st-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.st-dot.on,
+.mt-dot.on,
+.mt-dot-inline.on {
+  background: #22c55e;
+}
+
+.st-dot.off,
+.mt-dot.off,
+.mt-dot-inline.off {
+  background: #ef4444;
+}
+
+.st-banner {
+  position: absolute;
+  top: 44px;
+  left: 12px;
+  right: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(122, 47, 53, 0.9);
+  font-size: 13px;
+}
+
+.st-last {
+  position: absolute;
+  top: 40px;
+  left: 12px;
+  font-size: 11px;
+  color: #b8c3d6;
+}
+
+.st-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 12px;
+  background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.7));
+}
+
+.st-menu {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 70px;
+  max-width: 420px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(15, 24, 41, 0.96);
+  border: 1px solid #25324d;
+}
+
+.st-zone-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px;
+  background: rgba(15, 24, 41, 0.95);
+  font-size: 14px;
+}
+
+.st-zone-panel p {
+  margin: 0 0 4px;
+}
+
+.st-saver {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 14px;
+  color: #556078;
+}
+
+.st-saver p {
+  margin: 2px 0;
+}
+
+/* ── 모니터링 ── */
+.mt-root {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.mt-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 10px;
+  flex-wrap: wrap;
+}
+
+.mt-spacer {
+  flex: 1;
+}
+
+.mt-notice {
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: #2a2411;
+  border: 1px solid #5c4d17;
+  font-size: 13px;
+}
+
+.mt-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.mt-tile {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: #0f1829;
+  color: #e8edf5;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.mt-tile.alert {
+  border-color: #ef4444;
+  animation: mt-pulse 1s ease-in-out infinite;
+}
+
+@keyframes mt-pulse {
+  50% {
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.45);
+  }
+}
+
+.mt-img {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: #070c16;
+}
+
+.mt-img img,
+.mt-empty {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 화면에 영향이 없도록 좌측 상단 구석에 아주 작게, 색만 */
+.mt-dot {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+
+.mt-dot-inline {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.mt-cap {
+  padding: 4px 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mt-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.mt-sheet-body {
+  width: 100%;
+  max-width: 560px;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 16px 16px 0 0;
+  background: #101a2d;
+}
+
+.mt-sheet-body h4 {
+  margin: 18px 0 6px;
+}
+
+.mt-site {
+  padding-top: 4px;
+  border-top: 1px solid #25324d;
+  margin-top: 12px;
+}
+
+/* ── 라이브 ── */
+.lv-root {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  flex-direction: column;
+}
+
+.lv-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.lv-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px 12px;
+  min-height: 0;
+}
+
+.lv-video {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: #000;
+}

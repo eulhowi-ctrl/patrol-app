@@ -13,7 +13,7 @@ interface Attach {
   conn: string; // 소켓 고유 ID
 }
 
-const TO_STATION = new Set(["live-start", "live-stop", "offer", "answer", "ice"]);
+const TO_STATION = new Set(["live-start", "live-stop", "offer", "answer", "ice", "rtc-up"]);
 const TO_VIEWER = new Set(["offer", "answer", "ice", "frame", "live-error"]);
 
 export class SiteHub extends DurableObject<Env> {

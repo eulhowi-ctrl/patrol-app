@@ -131,6 +131,7 @@ export default {
       if (mm && m === "POST") return await postEvent(req, env, ctx, mm[1]);
       mm = path.match(/^\/api\/stations\/([\w-]+)\/snapshot$/);
       if (mm && m === "GET") return await getSnapshot(env, mm[1], url);
+      if (mm && m === "PUT") return await putSnapshot(req, env, ctx, mm[1]);
       mm = path.match(/^\/api\/stations\/([\w-]+)$/);
       if (mm && m === "DELETE") return await deleteStation(req, env, mm[1]);
       if (path === "/api/stations" && m === "POST") return await createStation(req, env);
@@ -336,6 +337,7 @@ async function createStation(req: Request, env: Env) {
   )
     .bind(id, site.id, name, await sha256(token), nowSec())
     .run();
+  await broadcast(env, site.id, { t: "station-added", stationId: id, name });
   return json({ stationId: id, stationToken: token, siteId: site.id, siteName: site.name, name });
 }
 
@@ -365,6 +367,24 @@ async function getSnapshot(env: Env, stationId: string, url: URL) {
   return new Response(dataUrlToBytes(row.image), {
     headers: { "Content-Type": "image/jpeg", "Cache-Control": cache, ...CORS },
   });
+}
+
+// 위반이 없어도 분할화면에 보여줄 "현재 모습" 한 장 (스테이션 시작 시, 이후 주기적으로)
+async function putSnapshot(req: Request, env: Env, ctx: ExecutionContext, stationId: string) {
+  const st = await authStation(env, stationId, req.headers.get("x-station-token"));
+  if (!st) return err(401, "인증 실패");
+  const body = await readJson<{ image?: string }>(req);
+  if (typeof body?.image !== "string" || body.image.length === 0) return err(400, "image가 필요합니다.");
+  if (body.image.length > 250_000) return err(413, "사진이 너무 큽니다.");
+  const now = nowSec();
+  await env.DB.prepare(
+    `INSERT INTO station_last (station_id, image, at) VALUES (?, ?, ?)
+     ON CONFLICT(station_id) DO UPDATE SET image = excluded.image, at = excluded.at`
+  )
+    .bind(stationId, body.image.replace(/^data:image\/jpeg;base64,/, ""), now)
+    .run();
+  ctx.waitUntil(broadcast(env, st.site_id, { t: "snapshot", stationId, snapshotAt: now }));
+  return json({ ok: true, snapshotAt: now });
 }
 
 // ───────── 이벤트 → 중복 방지 → Telegram ─────────

@@ -53,7 +53,13 @@ let pantsSession: InferenceSession | null = null;
 
 type WorkerRequest =
   | { type: "init"; modelPath: string }
-  | { type: "infer"; requestId: number; imageData: ImageData };
+  | {
+      type: "infer";
+      requestId: number;
+      imageData: ImageData;
+      // 스테이션 모드는 복장 분류기가 필요 없으면 끄고(연산 절약), 위험구역 판정용으로 사람 전체 박스만 요청
+      options?: { clothing?: boolean; persons?: boolean };
+    };
 
 type WorkerResponse =
   | { type: "ready" }
@@ -66,6 +72,8 @@ type WorkerResponse =
       // 위반이 하나도 없을 때 "정상착용" 초록 박스를 그리기 위한 사람 위치.
       // classifyClothing()이 옷차림 판정용으로 이미 계산하는 박스를 재사용한다.
       personBox: SimpleBox | null;
+      // options.persons 요청 시 — 화면 속 모든 사람 박스 (위험구역 겹침 판정용)
+      persons?: SimpleBox[];
     };
 
 interface PlainImage {
@@ -217,14 +225,8 @@ async function runClassifier(
   }
 }
 
-/** person.onnx(COCO YOLOv8n) 출력에서 person(class 0) 박스만 추출, 화면 정중앙에 가장 가까운 사람 하나 선택. */
-function detectMostCentralPerson(
-  output: Tensor,
-  scaleX: number,
-  scaleY: number,
-  frameWidth: number,
-  frameHeight: number
-): SimpleBox | null {
+/** person.onnx(COCO YOLOv8n) 출력에서 person(class 0) 박스를 모두 추출 (겹친 박스는 NMS로 제거). */
+function extractPersons(output: Tensor, scaleX: number, scaleY: number): SimpleBox[] {
   const data = output.data as Float32Array;
   const [, , numAnchors] = output.dims as number[];
 
@@ -239,19 +241,34 @@ function detectMostCentralPerson(
     const h = data[3 * numAnchors + i] * scaleY;
     candidates.push({ x: cx - w / 2, y: cy - h / 2, width: w, height: h, score });
   }
-  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.score - a.score);
+  const kept: SimpleBox[] = [];
+  for (const c of candidates) {
+    if (!kept.some((k) => iou(k, c) > IOU_THRESHOLD)) kept.push(c);
+  }
+  return kept;
+}
 
-  // 여러 사람이 있으면 화면 정중앙에 가장 가까이 있는 사람 하나만 판정한다
-  // (다인원 개별 판정은 추후 개선 여지 — labels.ts ClothingAttributes 주석 참고).
+/** 여러 사람이 있으면 화면 정중앙에 가장 가까이 있는 사람 하나만 옷차림 판정 대상으로 선택한다
+ *  (다인원 개별 판정은 추후 개선 여지 — labels.ts ClothingAttributes 주석 참고). */
+function pickMostCentral(
+  persons: SimpleBox[],
+  frameWidth: number,
+  frameHeight: number
+): SimpleBox | null {
+  if (persons.length === 0) return null;
   const centerX = frameWidth / 2;
   const centerY = frameHeight / 2;
-  const distanceToCenter = (b: SimpleBox) => {
-    const bx = b.x + b.width / 2;
-    const by = b.y + b.height / 2;
-    return Math.hypot(bx - centerX, by - centerY);
-  };
-  candidates.sort((a, b) => distanceToCenter(a) - distanceToCenter(b));
-  return candidates[0];
+  const distanceToCenter = (b: SimpleBox) =>
+    Math.hypot(b.x + b.width / 2 - centerX, b.y + b.height / 2 - centerY);
+  return [...persons].sort((a, b) => distanceToCenter(a) - distanceToCenter(b))[0];
+}
+
+async function detectPersons(image: PlainImage): Promise<SimpleBox[]> {
+  if (!personSession || !personSession.inputNames) return [];
+  const { tensor, scaleX, scaleY } = letterboxToTensor(image, PERSON_INPUT_SIZE);
+  const outputs = await personSession.run({ [personSession.inputNames[0]]: tensor });
+  return extractPersons(outputs[personSession.outputNames[0]], scaleX, scaleY);
 }
 
 interface ClothingResult {
@@ -261,16 +278,11 @@ interface ClothingResult {
   personBox: SimpleBox | null;
 }
 
-async function classifyClothing(image: PlainImage): Promise<ClothingResult> {
-  if (!personSession || !personSession.inputNames) return { attributes: null, personBox: null };
-
-  const { tensor: personTensor, scaleX, scaleY } = letterboxToTensor(image, PERSON_INPUT_SIZE);
-  const inputName = personSession.inputNames[0];
-  const outputs = await personSession.run({ [inputName]: personTensor });
-  const outputName = personSession.outputNames[0];
-  const personBox = detectMostCentralPerson(
-    outputs[outputName], scaleX, scaleY, image.width, image.height
-  );
+async function classifyClothing(
+  image: PlainImage,
+  persons: SimpleBox[]
+): Promise<ClothingResult> {
+  const personBox = pickMostCentral(persons, image.width, image.height);
   if (!personBox) return { attributes: null, personBox: null }; // 사람이 안 보이면 옷차림 판정 자체를 생략 (배경만 잘못 판정하는 것 방지)
 
   if (!harnessSession && !sleeveSession && !pantsSession) return { attributes: null, personBox };
@@ -300,7 +312,10 @@ async function classifyClothing(image: PlainImage): Promise<ClothingResult> {
   };
 }
 
-function iou(a: DetectionBox, b: DetectionBox): number {
+function iou(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number }
+): number {
   const x1 = Math.max(a.x, b.x);
   const y1 = Math.max(a.y, b.y);
   const x2 = Math.min(a.x + a.width, b.x + b.width);
@@ -420,7 +435,13 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       const outputs = await session.run({ [inputName]: tensor });
       const outputName = session.outputNames[0];
       const boxes = postprocess(outputs[outputName], scaleX, scaleY);
-      const { attributes: clothing, personBox } = await classifyClothing(msg.imageData);
+      const wantClothing = msg.options?.clothing ?? true;
+      const wantPersons = msg.options?.persons ?? false;
+      const persons =
+        wantClothing || wantPersons ? await detectPersons(msg.imageData) : [];
+      const { attributes: clothing, personBox } = wantClothing
+        ? await classifyClothing(msg.imageData, persons)
+        : { attributes: null, personBox: null };
 
       self.postMessage({
         type: "result",
@@ -428,6 +449,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         boxes,
         clothing,
         personBox,
+        persons: wantPersons ? persons : undefined,
       } satisfies WorkerResponse);
     } catch (err) {
       self.postMessage({
