@@ -1,0 +1,29 @@
+name = "argus-api"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+# D1: 서버 DB (database_id는 `wrangler d1 create argus` 후 실제 값으로 교체)
+[[d1_databases]]
+binding = "DB"
+database_name = "argus"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+# Durable Object: 사이트별 WebSocket 허브 (접속 상태, 실시간 알림, 라이브 중계)
+[[durable_objects.bindings]]
+name = "HUB"
+class_name = "SiteHub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SiteHub"]
+
+[vars]
+MAX_STATIONS = "30"
+MAX_SITES = "10"
+BOT_USERNAME = ""
+# BOT_TOKEN, WEBHOOK_SECRET은 wrangler secret put으로 등록 (로컬은 .dev.vars)
+
+# 매시간 오래된 이벤트 정리
+[triggers]
+crons = ["17 * * * *"]
