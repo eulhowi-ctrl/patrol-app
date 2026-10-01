@@ -74,6 +74,7 @@
 
 - **프론트엔드** (`web/src/components/CameraView.tsx`): `getUserMedia`로 카메라 스트림을 받아 Canvas에 그리고, 프레임을 Web Worker로 전달합니다.
 - **추론** (`web/src/workers/detection.worker.ts`): 메인 스레드를 막지 않도록 전용 Web Worker에서 ONNX Runtime Web(wasm 백엔드)으로 YOLO 스타일 모델을 구동합니다. onnxruntime-web은 이미 압축된 산출물이라 webpack이 재파싱하면 오류가 나기 때문에(`npm run build`로 실제 재현/확인됨), ESM import 대신 `web/public/ort/`에 정적 복사한 뒤 `importScripts()`로 불러옵니다 (`web/scripts/copy-onnx-assets.js`, `postinstall` 훅).
+- **시간적 평활화** (`web/src/lib/temporalSmoothing.ts`): 0.5초마다 독립적으로 추론하면 한 프레임의 순간 오탐/누락만으로도 배너·기록·외부알림이 바로 튀는 문제가 있어, `CameraView.tsx`가 워커 결과를 바로 쓰지 않고 최근 3프레임 중 2프레임 이상 등장한 라벨만 확정해서 화면/저장에 반영합니다. 카메라 전환(`facingMode` 변경) 시점에는 이전 화면의 이력이 섞이지 않도록 초기화합니다.
 - **오프라인 저장** (`web/src/lib/db.ts`): 감지 로그와 스냅샷(Base64 JPEG)을 IndexedDB에 저장합니다.
 - **동기화** (`web/src/lib/sync.ts`): `navigator.onLine` 이벤트와 Background Sync API(지원 브라우저)로 네트워크 복구를 감지해 미동기화 레코드를 서버에 일괄(Bulk) 전송합니다.
 - **백엔드** (`web/pages/api/detections.ts`): 최소 구현으로 수신 로그를 `web/data/detections.log.jsonl`에 append합니다. 운영 단계에서는 실제 DB(Postgres 등)로 교체가 필요합니다.

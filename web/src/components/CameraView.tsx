@@ -20,8 +20,15 @@ import {
 } from "../lib/labels";
 import { groupRecordsByHour } from "../lib/timeGrouping";
 import { notifyHighPriority } from "../lib/pushClient";
+import { createDetectionSmoother } from "../lib/temporalSmoothing";
 
 const INFER_INTERVAL_MS = 500; // 저사양 기기 배터리/발열 고려, 초당 2회 추론
+
+// 시간적 평활화 — 최근 3프레임(1.5초) 중 2프레임 이상에서 나와야 확정으로 본다.
+// 1프레임짜리 순간 오탐(특히 fire_smoke)은 걸러내면서도, 실제 위반은 보통 1.5초
+// 안에 바로 확정되므로 체감 지연은 거의 없다.
+const SMOOTHING_WINDOW_SIZE = 3;
+const SMOOTHING_MIN_VOTES = 2;
 
 // 왼쪽 화면 탭(❓설명 / 📋기록) 세로 드래그 위치 이동
 type TabKey = "guide" | "log";
@@ -121,6 +128,9 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const workerRef = useRef<Worker | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const smootherRef = useRef(
+    createDetectionSmoother({ windowSize: SMOOTHING_WINDOW_SIZE, minVotes: SMOOTHING_MIN_VOTES })
+  );
   const requestIdRef = useRef(0);
   const lastSignatureRef = useRef<string>("");
   const lastSavedSignatureRef = useRef<string>("");
@@ -197,10 +207,13 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
       } else if (data.type === "error") {
         setError(data.message);
       } else if (data.type === "result") {
-        setBoxes(data.boxes);
+        // 매 프레임 독립적으로 판정하면 한 프레임의 오탐/누락만으로도 배너·기록·외부알림이
+        // 바로 튄다 — 최근 프레임들의 과반수 투표로 확정된 라벨만 화면/저장에 반영한다.
+        const smoothedBoxes = smootherRef.current.update(data.boxes);
+        setBoxes(smoothedBoxes);
         setClothing(data.clothing);
         setPersonBox(data.personBox);
-        handleDetectionResult(data.boxes, data.clothing);
+        handleDetectionResult(smoothedBoxes, data.clothing);
       }
     };
 
@@ -238,6 +251,9 @@ export default function CameraView({ onBack }: { onBack?: () => void }) {
         // 이전 카메라(후면/전면) 스트림은 새 스트림이 잡힌 뒤에 정지해야 전환 중 화면이 끊기지 않는다.
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = stream;
+        // 화면 내용이 완전히 바뀌므로 이전 카메라의 탐지 이력을 들고 있으면 안 된다
+        // (전환 직후 몇 프레임 동안 과거 화면 기준 평활화가 적용되는 것을 방지).
+        smootherRef.current.reset();
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
