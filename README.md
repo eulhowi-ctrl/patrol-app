@@ -1,5 +1,13 @@
 # ARGUS (AI Safety Patrol System)
 
+> 🆕 **무인 스테이션 모드** (2026-10): 사람이 폰을 비추는 방식에서, 폐휴대폰·태블릿을 현장에 거치해
+> 상시 감시하고 위반 시에만 Telegram으로 알리는 방식으로 확장했습니다.
+> - 스테이션(`web/src/components/StationView.tsx`): 카메라 → 온디바이스 추론 → 3초 연속 감지 시 서버 보고 → 위험구역(선택)
+> - 모니터링(`MonitorView.tsx`, `LiveView.tsx`): 분할화면(마지막 감지 사진 + 접속 점), 칸 탭 시 라이브(WebRTC → 실패 시 사진 중계)
+> - 서버(`worker/`): Cloudflare Worker + D1 + Durable Object. 사이트 초대코드, 스테이션 최대 30개, 개인 DM 구독, 단계적 중복 알림 방지, 오탐 신고 음소거
+> - 서버 설치·배포: [worker/README.md](worker/README.md)
+> - 테스트: `worker/test/` (서버 E2E, 중복방지, 부하), `test/station-logic-test.mjs`, `test/e2e-browser.mjs`(Playwright)
+
 > 🚧 **진행 중인 작업** (새 세션에서는 아래 문서를 먼저 읽고 "진행 상태" 체크리스트의
 > 다음 미완료 항목부터 이어서 진행할 것):
 > - 헬멧(no_helmet) 인식률 개선 — 데이터 보강 + 재학습 진행 예정.
