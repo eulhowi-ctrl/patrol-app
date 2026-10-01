@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import Head from "next/head";
 import dynamic from "next/dynamic";
 import Dashboard from "../src/components/Dashboard";
+import { loadStation, removeStation, saveStation, type StationCreds } from "../src/lib/api";
+import { saveZone } from "../src/lib/zone";
 
 // getUserMedia/Canvas/WebSocket은 브라우저 전용 API이므로 SSR을 비활성화한다.
 const CameraView = dynamic(() => import("../src/components/CameraView"), { ssr: false });
@@ -24,6 +26,7 @@ function rememberRole(role: "station" | "monitor" | null) {
 export default function Home() {
   const [view, setView] = useState<View>("home");
   const [ready, setReady] = useState(false);
+  const [station, setStation] = useState<StationCreds | null>(null);
 
   // 현장 기기가 재부팅·새로고침되어도 마지막 역할(스테이션/모니터링)로 바로 복귀
   useEffect(() => {
@@ -33,8 +36,23 @@ export default function Home() {
     } catch {
       /* 무시 */
     }
+    setStation(loadStation());
     setReady(true);
   }, []);
+
+  // 이 기기에 등록된 스테이션 정보를 지워 새로 등록할 수 있게 한다
+  const unregisterStation = async () => {
+    if (!station) return;
+    if (!confirm(`이 기기의 스테이션 '${station.siteName} / ${station.name}' 등록을 해제할까요?`)) return;
+    try {
+      await removeStation(station);
+    } catch {
+      /* 서버에 이미 없거나 오프라인이어도 이 기기의 등록 정보는 지운다 */
+    }
+    saveStation(null);
+    saveZone(null);
+    setStation(null);
+  };
 
   const go = (v: View) => {
     rememberRole(v === "station" || v === "monitor" ? v : null);
@@ -58,8 +76,17 @@ export default function Home() {
             </p>
             <button className="home-card" onClick={() => go("station")}>
               <strong>스테이션으로 쓰기</strong>
-              <span>이 기기를 현장에 거치해 상시 감시합니다</span>
+              <span>
+                {station
+                  ? `현재 등록: ${station.siteName} / ${station.name}`
+                  : "이 기기를 현장에 거치해 상시 감시합니다"}
+              </span>
             </button>
+            {station && (
+              <button className="st-link" onClick={unregisterStation}>
+                이 기기의 스테이션 등록 해제 (다른 사이트·이름으로 다시 등록)
+              </button>
+            )}
             <button className="home-card" onClick={() => go("monitor")}>
               <strong>모니터링 보기</strong>
               <span>여러 스테이션을 한 화면에서 확인하고 알림을 설정합니다</span>

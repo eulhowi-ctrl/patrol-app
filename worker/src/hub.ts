@@ -31,6 +31,22 @@ export class SiteHub extends DurableObject<Env> {
       return new Response("ok");
     }
 
+    // 스테이션 등록이 삭제됨 — 해당 기기에 알리고 연결을 끊는다 (stationId 없으면 사이트 전체)
+    if (url.pathname === "/kick") {
+      const only = url.searchParams.get("stationId");
+      for (const s of this.stationSockets()) {
+        const a = s.deserializeAttachment() as Attach;
+        if (only && a.id !== only) continue;
+        try {
+          s.send(JSON.stringify({ t: "removed" }));
+          s.close(1000, "removed");
+        } catch {
+          /* 이미 끊김 */
+        }
+      }
+      return new Response("ok");
+    }
+
     if (req.headers.get("Upgrade") !== "websocket") {
       return new Response("WebSocket만 허용됩니다.", { status: 426 });
     }

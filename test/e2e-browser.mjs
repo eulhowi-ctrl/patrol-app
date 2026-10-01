@@ -101,10 +101,41 @@ try {
   await mo.screenshot({ path: "monitor.png" });
   await st.screenshot({ path: "station.png" });
 
+  // 확인 창(confirm/prompt)은 자동 수락
+  mo.on("dialog", (d) => (d.type() === "prompt" ? d.accept("이름 바뀐 발전소") : d.accept()));
+
+  // ── 모니터링에서 스테이션 삭제 → 그 기기는 등록 화면으로 돌아감 ──
+  await mo.getByRole("button", { name: "설정", exact: true }).click();
+  await mo.getByRole("button", { name: "삭제", exact: true }).click();
+  await st.waitForSelector("text=스테이션 등록", { timeout: 15000 });
+  log("모니터링에서 스테이션 삭제 → 해당 기기가 등록 화면으로 복귀");
+  await mo.getByRole("button", { name: "닫기" }).click();
+  await mo.waitForSelector("text=아직 등록된 스테이션이 없습니다", { timeout: 10000 });
+  log("삭제된 스테이션 칸이 분할화면에서 사라짐");
+
+  // ── 같은 기기로 다시 등록 → 온라인 ──
+  await st.getByPlaceholder("예: K7M2QX").fill(site.inviteCode);
+  await st.getByPlaceholder("예: 터빈동 1층 입구").fill("보일러동");
+  await st.getByRole("button", { name: "등록하고 시작" }).click();
+  await st.waitForSelector(".st-top .st-dot.on", { timeout: 20000 });
+  await mo.waitForSelector(".mt-tile .mt-dot.on", { timeout: 15000 });
+  log("같은 기기를 새 이름으로 재등록 → 다시 초록 점");
+
   // ── 스테이션 종료 → 오프라인 ──
   await stCtx.close();
   await mo.waitForSelector(".mt-tile .mt-dot.off", { timeout: 15000 });
   log("스테이션 종료 → 빨간 점");
+
+  // ── 사이트 이름 변경 ──
+  await mo.getByRole("button", { name: "설정", exact: true }).click();
+  await mo.getByRole("button", { name: "이름 변경" }).click();
+  await mo.waitForSelector("h4:has-text('이름 바뀐 발전소')", { timeout: 10000 });
+  log("사이트 이름 변경");
+
+  // ── 사이트 삭제 → 참여 사이트가 없으니 시작 화면 ──
+  await mo.getByRole("button", { name: "사이트 삭제" }).click();
+  await mo.waitForSelector("text=모니터링 시작", { timeout: 10000 });
+  log("사이트 삭제 → 모니터링 시작 화면");
 } catch (e) {
   failed = true;
   console.error("\n✗ 실패:", e.message);

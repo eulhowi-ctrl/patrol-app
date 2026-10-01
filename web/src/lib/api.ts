@@ -107,6 +107,7 @@ export interface MeSite {
   id: string;
   name: string;
   inviteCode: string;
+  canManage: boolean; // 소유자(또는 소유자 정보 없는 예전 사이트의 참여자)만 이름 변경·삭제 가능
   stations: MeStation[];
 }
 export interface Me {
@@ -128,6 +129,13 @@ export const joinSite = (user: UserCreds, inviteCode: string) =>
     body: { inviteCode },
     user,
   });
+export const renameSite = (user: UserCreds, siteId: string, name: string) =>
+  call<{ ok: true; name: string }>(`/api/sites/${siteId}`, { method: "PUT", body: { name }, user });
+export const deleteSite = (user: UserCreds, siteId: string) =>
+  call<{ ok: true; removedStations: number }>(`/api/sites/${siteId}`, { method: "DELETE", user });
+// 모니터링 화면에서 스테이션 등록 삭제 (꺼진 기기·잘못 등록된 스테이션 정리)
+export const removeStationAsUser = (user: UserCreds, stationId: string) =>
+  call<{ ok: true }>(`/api/stations/${stationId}`, { method: "DELETE", user });
 export const setSubscription = (user: UserCreds, stationId: string, on: boolean) =>
   call<{ ok: true }>("/api/subscriptions", {
     method: "PUT",

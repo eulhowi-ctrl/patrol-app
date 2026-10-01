@@ -440,6 +440,11 @@ function StationRunner({
       } catch {
         return; // "pong" 등
       }
+      // 모니터링 화면에서 이 스테이션(또는 사이트)이 삭제됨 — 등록 정보를 지우고 처음 상태로
+      if (msg.t === "removed") {
+        onRemovedRef.current();
+        return;
+      }
       const conn = msg.from;
       if (!conn) return;
       if (msg.t === "live-start") startLive(conn, !!msg.rtc);
@@ -458,6 +463,8 @@ function StationRunner({
     },
     [startLive, stopLive]
   );
+  const onRemovedRef = useRef(onRemoved);
+  onRemovedRef.current = onRemoved;
   const handleWsMessageRef = useRef(handleWsMessage);
   handleWsMessageRef.current = handleWsMessage;
 

@@ -145,6 +145,9 @@ export default {
       if (path === "/api/sites" && m === "POST") return await createSite(req, env, uid);
       if (path === "/api/join" && m === "POST") return await joinSite(req, env, uid);
       if (path === "/api/subscriptions" && m === "PUT") return await setSubscription(req, env, uid);
+      mm = path.match(/^\/api\/sites\/([\w-]+)$/);
+      if (mm && m === "PUT") return await renameSite(req, env, uid, mm[1]);
+      if (mm && m === "DELETE") return await deleteSite(env, uid, mm[1]);
 
       return err(404, "없는 경로입니다.");
     } catch (e) {
@@ -192,8 +195,8 @@ async function createSite(req: Request, env: Env, uid: string) {
     try {
       await env.DB.batch([
         env.DB.prepare(
-          "INSERT INTO sites (id, name, invite_code, created_at) VALUES (?, ?, ?, ?)"
-        ).bind(id, name, code, nowSec()),
+          "INSERT INTO sites (id, name, invite_code, created_at, owner_id) VALUES (?, ?, ?, ?, ?)"
+        ).bind(id, name, code, nowSec(), uid),
         env.DB.prepare("INSERT INTO user_sites (user_id, site_id) VALUES (?, ?)").bind(uid, id),
       ]);
       return json({ site: { id, name, inviteCode: code } });
@@ -224,10 +227,10 @@ async function getMe(env: Env, uid: string) {
 
   const sites = (
     await env.DB.prepare(
-      "SELECT s.id, s.name, s.invite_code FROM sites s JOIN user_sites u ON u.site_id = s.id WHERE u.user_id = ?"
+      "SELECT s.id, s.name, s.invite_code, s.owner_id FROM sites s JOIN user_sites u ON u.site_id = s.id WHERE u.user_id = ?"
     )
       .bind(uid)
-      .all<{ id: string; name: string; invite_code: string }>()
+      .all<{ id: string; name: string; invite_code: string; owner_id: string | null }>()
   ).results;
 
   const stations = (
@@ -267,6 +270,7 @@ async function getMe(env: Env, uid: string) {
       id: s.id,
       name: s.name,
       inviteCode: s.invite_code,
+      canManage: s.owner_id === null || s.owner_id === uid,
       stations: stations
         .filter((st) => st.site_id === s.id)
         .map((st) => ({
@@ -342,18 +346,87 @@ async function createStation(req: Request, env: Env) {
   return json({ stationId: id, stationToken: token, siteId: site.id, siteName: site.name, name });
 }
 
+// 스테이션 삭제: 그 기기 본인(스테이션 토큰) 또는 사이트 참여자(모니터링 화면에서 정리)
 async function deleteStation(req: Request, env: Env, stationId: string) {
+  let siteId: string | null = null;
   const st = await authStation(env, stationId, req.headers.get("x-station-token"));
-  if (!st) return err(401, "인증 실패");
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM subscriptions WHERE station_id = ?").bind(stationId),
-    env.DB.prepare("DELETE FROM alert_state WHERE station_id = ?").bind(stationId),
-    env.DB.prepare("DELETE FROM station_last WHERE station_id = ?").bind(stationId),
-    env.DB.prepare("DELETE FROM events WHERE station_id = ?").bind(stationId),
-    env.DB.prepare("DELETE FROM stations WHERE id = ?").bind(stationId),
-  ]);
-  await broadcast(env, st.site_id, { t: "station-removed", stationId });
+  if (st) {
+    siteId = st.site_id;
+  } else {
+    const uid = await authUser(req, env);
+    if (!uid) return err(401, "인증 실패");
+    const row = await env.DB.prepare(
+      `SELECT st.site_id FROM stations st JOIN user_sites u ON u.site_id = st.site_id
+       WHERE st.id = ? AND u.user_id = ?`
+    )
+      .bind(stationId, uid)
+      .first<{ site_id: string }>();
+    if (!row) return err(403, "삭제 권한이 없습니다.");
+    siteId = row.site_id;
+  }
+  await removeStationRows(env, [stationId]);
+  await kick(env, siteId, stationId);
+  await broadcast(env, siteId, { t: "station-removed", stationId });
   return json({ ok: true });
+}
+
+async function removeStationRows(env: Env, ids: string[]) {
+  const stmts: D1PreparedStatement[] = [];
+  for (const id of ids) {
+    stmts.push(
+      env.DB.prepare("DELETE FROM subscriptions WHERE station_id = ?").bind(id),
+      env.DB.prepare("DELETE FROM alert_state WHERE station_id = ?").bind(id),
+      env.DB.prepare("DELETE FROM station_last WHERE station_id = ?").bind(id),
+      env.DB.prepare("DELETE FROM events WHERE station_id = ?").bind(id),
+      env.DB.prepare("DELETE FROM stations WHERE id = ?").bind(id)
+    );
+  }
+  if (stmts.length) await env.DB.batch(stmts);
+}
+
+async function kick(env: Env, siteId: string, stationId?: string) {
+  try {
+    const q = stationId ? `?stationId=${stationId}` : "";
+    await hubFor(env, siteId).fetch(`https://hub/kick${q}`, { method: "POST" });
+  } catch (e) {
+    console.warn("[hub] kick 실패", e);
+  }
+}
+
+// 소유자만(소유자 정보가 없는 예전 사이트는 참여자 누구나) 이름 변경·삭제 가능
+async function manageableSite(env: Env, uid: string, siteId: string) {
+  return env.DB.prepare(
+    `SELECT s.id FROM sites s JOIN user_sites u ON u.site_id = s.id AND u.user_id = ?
+     WHERE s.id = ? AND (s.owner_id IS NULL OR s.owner_id = ?)`
+  )
+    .bind(uid, siteId, uid)
+    .first<{ id: string }>();
+}
+
+async function renameSite(req: Request, env: Env, uid: string, siteId: string) {
+  const body = await readJson<{ name?: string }>(req);
+  const name = cleanName(body?.name, 40);
+  if (!name) return err(400, "사이트 이름이 필요합니다.");
+  if (!(await manageableSite(env, uid, siteId))) return err(403, "이름을 바꿀 권한이 없습니다.");
+  await env.DB.prepare("UPDATE sites SET name = ? WHERE id = ?").bind(name, siteId).run();
+  await broadcast(env, siteId, { t: "site-renamed", name });
+  return json({ ok: true, name });
+}
+
+async function deleteSite(env: Env, uid: string, siteId: string) {
+  if (!(await manageableSite(env, uid, siteId))) return err(403, "삭제 권한이 없습니다.");
+  const ids = (
+    await env.DB.prepare("SELECT id FROM stations WHERE site_id = ?").bind(siteId).all<{ id: string }>()
+  ).results.map((r) => r.id);
+  await removeStationRows(env, ids);
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM group_links WHERE site_id = ?").bind(siteId),
+    env.DB.prepare("DELETE FROM user_sites WHERE site_id = ?").bind(siteId),
+    env.DB.prepare("DELETE FROM sites WHERE id = ?").bind(siteId),
+  ]);
+  await kick(env, siteId);
+  await broadcast(env, siteId, { t: "site-removed" });
+  return json({ ok: true, removedStations: ids.length });
 }
 
 async function getSnapshot(env: Env, stationId: string, url: URL) {

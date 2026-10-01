@@ -180,7 +180,9 @@ try {
   const labels = ["no_helmet", "no_vest", "no_mask", "no_safety_glasses", "no_harness", "short_sleeve", "short_pants", "fire_smoke", "man_down", "zone_intrusion"];
   // 서로 다른 유형 10종 × 2회 = 서로 다른 (유형) 첫 알림 10건 → 그룹 15건 이내라 모두 전송
   for (const l of labels) await ev(l, sG);
-  await sleep(1200);
+  // 알림 발송은 응답 후 비동기(waitUntil)라 도착을 기다린다
+  await wait(() => calls.filter((c) => c.chat === "-900" && c.method === "sendPhoto").length >= 10, 8000);
+  await sleep(500); // 초과 발송이 없는지 확인
   const groupSends = calls.filter((c) => c.chat === "-900" && c.method === "sendPhoto").length;
   assert.equal(groupSends, 10);
   ok("그룹 /link 연결, 10건 모두 전송 (15건 한도 이내)");
@@ -195,6 +197,40 @@ try {
   assert.equal((await api(`/api/stations/${sB.stationId}`, { method: "DELETE", station: sB.stationToken })).status, 200);
   ok("스테이션 등록 해제 (잘못된 토큰은 거부)");
 
+  // 12) 사이트 이름 변경 / 스테이션 삭제 / 사이트 삭제 (소유자만)
+  me = (await api("/api/me", { user: alice })).data;
+  assert.equal(me.sites.find((x) => x.id === site.id).canManage, true);
+  me = (await api("/api/me", { user: bob })).data;
+  assert.equal(me.sites.find((x) => x.id === site.id).canManage, false);
+  ok("소유자만 canManage=true");
+
+  assert.equal((await api(`/api/sites/${site.id}`, { method: "PUT", user: bob, body: { name: "해킹" } })).status, 403);
+  assert.equal((await api(`/api/sites/${site.id}`, { method: "PUT", user: alice, body: { name: "새 이름" } })).status, 200);
+  me = (await api("/api/me", { user: bob })).data;
+  assert.equal(me.sites.find((x) => x.id === site.id).name, "새 이름");
+  ok("이름 변경: 소유자만 가능, 다른 참여자 화면에도 반영");
+
+  // 모니터링에서 스테이션 삭제 → 해당 기기에 removed 전달
+  const sC = (await api("/api/stations", { method: "POST", body: { inviteCode: site.inviteCode, name: "삭제 대상" } })).data;
+  const cWs = new WebSocket(`${API.replace("http", "ws")}/ws?role=station&stationId=${sC.stationId}&token=${sC.stationToken}`);
+  const cMsgs = [];
+  await new Promise((r) => (cWs.onopen = r));
+  cWs.onmessage = (e) => cMsgs.push(e.data);
+  const outsider = (await api("/api/users", { method: "POST" })).data;
+  assert.equal((await api(`/api/stations/${sC.stationId}`, { method: "DELETE", user: outsider })).status, 403);
+  assert.equal((await api(`/api/stations/${sC.stationId}`, { method: "DELETE", user: bob })).status, 200);
+  assert.ok(await wait(() => cMsgs.some((m) => m.includes('"removed"'))));
+  ok("참여자가 스테이션 삭제 → 기기에 removed 전달 (외부인은 403)");
+
+  // 사이트 삭제: 소유자만, 스테이션·구독 함께 정리
+  assert.equal((await api(`/api/sites/${site.id}`, { method: "DELETE", user: bob })).status, 403);
+  const del = await api(`/api/sites/${site.id}`, { method: "DELETE", user: alice });
+  assert.equal(del.status, 200);
+  me = (await api("/api/me", { user: alice })).data;
+  assert.equal(me.sites.some((x) => x.id === site.id), false);
+  assert.equal((await api("/api/stations", { method: "POST", body: { inviteCode: site.inviteCode, name: "x" } })).status, 404);
+  ok("사이트 삭제: 소유자만, 초대코드 무효화·연관 스테이션 정리");
+
   viewer.close();
   console.log(`\n통과 ${pass}건`);
 } catch (e) {
@@ -202,4 +238,6 @@ try {
   process.exitCode = 1;
 } finally {
   mock.close();
+  // 열린 WebSocket이 남아 있어도 프로세스가 끝나도록
+  setTimeout(() => process.exit(process.exitCode ?? 0), 100);
 }

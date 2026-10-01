@@ -2,10 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ApiError,
   createSite,
+  deleteSite,
   ensureUser,
   getMe,
   getTelegramLink,
   joinSite,
+  removeStationAsUser,
+  renameSite,
   setSubscription,
   snapshotUrl,
   viewerSocketUrl,
@@ -164,7 +167,12 @@ export default function MonitorView({ onBack }: { onBack?: () => void }) {
             setFlash((f) => ({ ...f, [msg.stationId as string]: Date.now() + FLASH_MS }));
             if (soundRef.current) beep();
           }
-        } else if (msg.t === "station-added" || msg.t === "station-removed") {
+        } else if (
+          msg.t === "station-added" ||
+          msg.t === "station-removed" ||
+          msg.t === "site-renamed" ||
+          msg.t === "site-removed"
+        ) {
           void refresh(user);
         }
       };
@@ -388,6 +396,39 @@ function SettingsPanel({
 }) {
   const [error, setError] = useState<string | null>(null);
 
+  const run = async (fn: () => Promise<unknown>) => {
+    setError(null);
+    try {
+      await fn();
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "요청 실패");
+    }
+  };
+
+  const rename = (site: Me["sites"][number]) => {
+    const name = window.prompt("새 사이트 이름", site.name)?.trim();
+    if (name && name !== site.name) void run(() => renameSite(user, site.id, name));
+  };
+
+  const removeSite = (site: Me["sites"][number]) => {
+    const n = site.stations.length;
+    if (
+      window.confirm(
+        `'${site.name}' 사이트를 삭제할까요?
+등록된 스테이션 ${n}대도 함께 삭제되고, 해당 기기는 등록이 해제됩니다.`
+      )
+    ) {
+      void run(() => deleteSite(user, site.id));
+    }
+  };
+
+  const removeStation = (st: MeStation) => {
+    if (window.confirm(`스테이션 '${st.name}'을(를) 삭제할까요? 해당 기기는 등록이 해제됩니다.`)) {
+      void run(() => removeStationAsUser(user, st.id));
+    }
+  };
+
   const connectTelegram = async () => {
     setError(null);
     try {
@@ -421,7 +462,16 @@ function SettingsPanel({
 
         {me.sites.map((site) => (
           <div key={site.id} className="mt-site">
-            <h4>{site.name}</h4>
+            <div className="st-row">
+              <h4 style={{ margin: 0 }}>{site.name}</h4>
+              <span className="mt-spacer" />
+              {site.canManage && (
+                <>
+                  <button className="st-chip" onClick={() => rename(site)}>이름 변경</button>
+                  <button className="st-chip" onClick={() => removeSite(site)}>사이트 삭제</button>
+                </>
+              )}
+            </div>
             <p className="st-muted">
               초대코드 <b className="st-code-inline">{site.inviteCode}</b> — 동료는 이 코드로 참여하고, 스테이션 기기도 이 코드로 등록합니다.
               <br />
@@ -432,7 +482,17 @@ function SettingsPanel({
               <label key={st.id} className="st-check">
                 <input type="checkbox" checked={st.subscribed} onChange={(e) => onToggle(st, e.target.checked)} />
                 <span className={`mt-dot-inline ${st.online ? "on" : "off"}`} />
-                {st.name}
+                <span style={{ flex: 1 }}>{st.name}</span>
+                <button
+                  type="button"
+                  className="st-chip"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    removeStation(st);
+                  }}
+                >
+                  삭제
+                </button>
               </label>
             ))}
           </div>
