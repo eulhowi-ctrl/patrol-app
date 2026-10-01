@@ -123,6 +123,7 @@ export default {
       if (path === "/ws") return await handleWs(req, env, url);
       if (path === "/api/health") return await handleHealth(env);
       if (path === "/api/users" && m === "POST") return await createUser(env);
+      if (path === "/api/admin/set-webhook" && m === "POST") return await adminSetWebhook(req, env, url);
       if (path === "/api/telegram/webhook" && m === "POST")
         return await handleTelegram(req, env, ctx);
 
@@ -516,6 +517,25 @@ async function notify(
     }
     if (gd.send) await sendAlert(env, g.chat_id, text, image, markup);
   }
+}
+
+// 서버가 자기 BOT_TOKEN으로 Telegram 웹훅을 등록한다 (토큰을 로컬로 꺼내지 않기 위함).
+// WEBHOOK_SECRET을 x-admin-secret 헤더로 보내야만 동작한다.
+async function adminSetWebhook(req: Request, env: Env, url: URL) {
+  if (!env.WEBHOOK_SECRET || req.headers.get("x-admin-secret") !== env.WEBHOOK_SECRET) {
+    return err(403, "forbidden");
+  }
+  if (!env.BOT_TOKEN) return err(400, "BOT_TOKEN이 설정되지 않았습니다.");
+  const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/setWebhook`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      url: `${url.origin}/api/telegram/webhook`,
+      secret_token: env.WEBHOOK_SECRET,
+      allowed_updates: ["message", "callback_query"],
+    }),
+  });
+  return json(await res.json());
 }
 
 // ───────── Telegram 웹훅 ─────────

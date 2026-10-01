@@ -90,6 +90,9 @@ const total = perStationPerDay * stations.length;
 console.log(`\n[추정] 스테이션 ${stations.length}대 하루 요청 약 ${total}건 (무료 한도 100,000건의 ${((total / 100000) * 100).toFixed(1)}%)`);
 console.log(`[추정] D1 쓰기 약 ${total * 3}행 (무료 한도 100,000행의 ${(((total * 3) / 100000) * 100).toFixed(1)}%, 이벤트당 약 3행)`);
 
+// 정리: 테스트용 스테이션 등록 해제 (운영 서버에서 실행해도 30개 한도를 차지하지 않도록)
+await Promise.all(stations.map((s) => req(`/api/stations/${s.stationId}`, { method: "DELETE", headers: { "x-station-token": s.stationToken } })));
+
 sockets.forEach((s) => s.close());
 viewers.forEach((v) => v.close());
 process.exit(errors ? 1 : 0);
