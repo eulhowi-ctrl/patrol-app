@@ -158,6 +158,8 @@ export default {
       if (mm && m === "POST") return await reissueViewCode(env, uid, mm[1]);
       mm = path.match(/^\/api\/sites\/([\w-]+)\/membership$/);
       if (mm && m === "DELETE") return await leaveSite(env, uid, mm[1]);
+      mm = path.match(/^\/api\/sites\/([\w-]+)\/owner-name$/);
+      if (mm && m === "PUT") return await setOwnerName(req, env, uid, mm[1]);
       mm = path.match(/^\/api\/sites\/([\w-]+)\/members$/);
       if (mm && m === "GET") return await listMembers(env, uid, mm[1]);
       if (mm && m === "DELETE") return await kickMembers(env, uid, mm[1], null);
@@ -197,9 +199,12 @@ async function createUser(env: Env) {
 }
 
 async function createSite(req: Request, env: Env, uid: string) {
-  const body = await readJson<{ name?: string }>(req);
+  const body = await readJson<{ name?: string; ownerName?: string }>(req);
   const name = cleanName(body?.name, 40);
   if (!name) return err(400, "사이트 이름이 필요합니다.");
+  // 개설자 이름도 필수 (참여자와 같은 규칙: 보이지 않는 문자만은 금지)
+  const ownerName = cleanNickname(body?.ownerName);
+  if (!ownerName) return err(400, "개설자 이름을 입력해야 만들 수 있습니다.");
 
   const cnt = await env.DB.prepare("SELECT COUNT(*) AS n FROM sites").first<{ n: number }>();
   if ((cnt?.n ?? 0) >= Number(env.MAX_SITES)) return err(403, "사이트 개수 한도에 도달했습니다.");
@@ -211,11 +216,11 @@ async function createSite(req: Request, env: Env, uid: string) {
     try {
       await env.DB.batch([
         env.DB.prepare(
-          "INSERT INTO sites (id, name, invite_code, view_code, created_at, owner_id) VALUES (?, ?, ?, ?, ?, ?)"
-        ).bind(id, name, code, viewCode, nowSec(), uid),
+          "INSERT INTO sites (id, name, invite_code, view_code, created_at, owner_id, owner_name) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        ).bind(id, name, code, viewCode, nowSec(), uid, ownerName),
         env.DB.prepare("INSERT INTO user_sites (user_id, site_id, joined_at) VALUES (?, ?, ?)").bind(uid, id, nowSec()),
       ]);
-      return json({ site: { id, name, inviteCode: code, viewCode } });
+      return json({ site: { id, name, inviteCode: code, viewCode, ownerName } });
     } catch {
       // 초대코드 충돌 시 재시도
     }
@@ -262,10 +267,10 @@ async function getMe(env: Env, uid: string) {
 
   const sites = (
     await env.DB.prepare(
-      "SELECT s.id, s.name, s.invite_code, s.view_code, s.owner_id FROM sites s JOIN user_sites u ON u.site_id = s.id WHERE u.user_id = ?"
+      "SELECT s.id, s.name, s.invite_code, s.view_code, s.owner_id, s.owner_name FROM sites s JOIN user_sites u ON u.site_id = s.id WHERE u.user_id = ?"
     )
       .bind(uid)
-      .all<{ id: string; name: string; invite_code: string; view_code: string | null; owner_id: string | null }>()
+      .all<{ id: string; name: string; invite_code: string; view_code: string | null; owner_id: string | null; owner_name: string | null }>()
   ).results;
 
   const stations = (
@@ -309,6 +314,7 @@ async function getMe(env: Env, uid: string) {
       name: s.name,
       inviteCode: canManage ? s.invite_code : null,
       viewCode: canManage ? s.view_code : null,
+      ownerName: s.owner_name, // 참여자 화면에 "개설자: 이름". 예전 사이트는 null → 개설자에게 등록 안내
       canManage,
       stations: stations
         .filter((st) => st.site_id === s.id)
@@ -485,6 +491,17 @@ async function reissueViewCode(env: Env, uid: string, siteId: string) {
     }
   }
   return err(500, "보안코드 생성 실패");
+}
+
+// 개설자 이름 등록·변경 (예전 사이트는 이름이 없어 앱에서 한 번 등록)
+async function setOwnerName(req: Request, env: Env, uid: string, siteId: string) {
+  if (!(await manageableSite(env, uid, siteId))) return err(403, "개설자만 바꿀 수 있습니다.");
+  const body = await readJson<{ ownerName?: string }>(req);
+  const ownerName = cleanNickname(body?.ownerName);
+  if (!ownerName) return err(400, "이름을 입력해 주세요.");
+  await env.DB.prepare("UPDATE sites SET owner_name = ? WHERE id = ?").bind(ownerName, siteId).run();
+  await broadcast(env, siteId, { t: "site-renamed" }); // 참여자 화면 갱신
+  return json({ ok: true, ownerName });
 }
 
 // 개설자용 참여자 목록 (본인 제외). 로그인이 없어 이름은 참여 때 적은 것(선택)

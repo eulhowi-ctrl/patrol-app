@@ -82,7 +82,11 @@ try {
 
   const alice = (await api("/api/users", { method: "POST" })).data;
   const bob = (await api("/api/users", { method: "POST" })).data;
-  const site = (await api("/api/sites", { method: "POST", user: alice, body: { name: "테스트 발전소" } })).data.site;
+  assert.equal((await api("/api/sites", { method: "POST", user: alice, body: { name: "이름 없음" } })).status, 400);
+  assert.equal((await api("/api/sites", { method: "POST", user: alice, body: { name: "공백 이름", ownerName: " \u3000\u200B\u3164 " } })).status, 400);
+  ok("개설자 이름 없이(빈칸·보이지 않는 문자만) 사이트 생성 → 400");
+  const site = (await api("/api/sites", { method: "POST", user: alice, body: { name: "테스트 발전소", ownerName: " 앨리스 " } })).data.site;
+  assert.equal(site.ownerName, "앨리스");
   assert.match(site.inviteCode, /^[A-Z2-9]{6}$/);
   assert.match(site.viewCode, /^[A-Z2-9]{8}$/);
   ok("사용자·사이트 생성, 초대코드·보안코드 발급");
@@ -113,7 +117,13 @@ try {
   const bobMe = (await api("/api/me", { user: bob })).data.sites[0];
   assert.equal(bobMe.inviteCode, null);
   assert.equal(bobMe.viewCode, null);
-  ok("참여자에게는 코드가 보이지 않음");
+  assert.equal(bobMe.ownerName, "앨리스");
+  ok("참여자에게는 코드가 보이지 않음, 개설자 이름은 보임");
+  assert.equal((await api(`/api/sites/${site.id}/owner-name`, { method: "PUT", user: bob, body: { ownerName: "해킹" } })).status, 403);
+  assert.equal((await api(`/api/sites/${site.id}/owner-name`, { method: "PUT", user: alice, body: { ownerName: "\u2800" } })).status, 400);
+  assert.equal((await api(`/api/sites/${site.id}/owner-name`, { method: "PUT", user: alice, body: { ownerName: "앨리스 반장" } })).status, 200);
+  assert.equal((await api("/api/me", { user: bob })).data.sites[0].ownerName, "앨리스 반장");
+  ok("개설자 이름 변경: 개설자만, 빈칸 금지, 참여자 화면에 반영");
   await api("/api/subscriptions", { method: "PUT", user: bob, body: { stationId: sA.stationId, on: true } });
   await api("/api/subscriptions", { method: "PUT", user: alice, body: { stationId: sA.stationId, on: true } });
   await api("/api/subscriptions", { method: "PUT", user: alice, body: { stationId: sB.stationId, on: true } });
@@ -189,7 +199,7 @@ try {
   ok("오탐 신고 콜백 → 음소거 + 알림");
 
   // 9) 그룹 연결 + 분당 제한 묶음
-  const groupSite = (await api("/api/sites", { method: "POST", user: alice, body: { name: "그룹 테스트" } })).data.site;
+  const groupSite = (await api("/api/sites", { method: "POST", user: alice, body: { name: "그룹 테스트", ownerName: "앨리스" } })).data.site;
   const sG = (await api("/api/stations", { method: "POST", body: { inviteCode: groupSite.inviteCode, name: "G1" } })).data;
   await webhook({ message: { chat: { id: -900, type: "group" }, text: "/link@argus_bot " + groupSite.viewCode } });
   await sleep(500);

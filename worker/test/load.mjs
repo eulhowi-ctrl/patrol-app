@@ -32,7 +32,7 @@ async function req(path, { method = "GET", body, headers = {} } = {}) {
 
 const user = (await req("/api/users", { method: "POST" })).data;
 const uh = { "x-user-id": user.userId, "x-user-token": user.userToken };
-const { site } = (await req("/api/sites", { method: "POST", body: { name: "부하 테스트" }, headers: uh })).data;
+const { site } = (await req("/api/sites", { method: "POST", body: { name: "부하 테스트", ownerName: "부하" }, headers: uh })).data;
 
 // 1) 등록 — 30대까지 성공, 초과분은 403
 const stations = [];

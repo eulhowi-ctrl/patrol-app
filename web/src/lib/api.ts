@@ -108,6 +108,7 @@ export interface MeSite {
   name: string;
   inviteCode: string | null; // 스테이션 등록용 (관리자에게만 보임)
   viewCode: string | null; // 모니터링 참여용 보안코드 (관리자에게만 보임)
+  ownerName: string | null; // 개설자 이름 (예전 사이트는 null → 개설자에게 등록 안내)
   canManage: boolean; // 소유자(또는 소유자 정보 없는 예전 사이트의 참여자)만 이름 변경·삭제 가능
   stations: MeStation[];
 }
@@ -118,12 +119,14 @@ export interface Me {
 }
 
 export const getMe = (user: UserCreds) => call<Me>("/api/me", { user });
-export const createSite = (user: UserCreds, name: string) =>
-  call<{ site: { id: string; name: string; inviteCode: string; viewCode: string } }>("/api/sites", {
+export const createSite = (user: UserCreds, name: string, ownerName: string) =>
+  call<{ site: { id: string; name: string; inviteCode: string; viewCode: string; ownerName: string } }>("/api/sites", {
     method: "POST",
-    body: { name },
+    body: { name, ownerName },
     user,
   });
+export const setOwnerName = (user: UserCreds, siteId: string, ownerName: string) =>
+  call<{ ok: true; ownerName: string }>(`/api/sites/${siteId}/owner-name`, { method: "PUT", body: { ownerName }, user });
 export const joinSite = (user: UserCreds, viewCode: string, nickname: string) =>
   call<{ site: { id: string; name: string } }>("/api/join", {
     method: "POST",

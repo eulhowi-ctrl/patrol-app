@@ -38,7 +38,7 @@ let failed = false;
 try {
   // 서버 준비: 사용자·사이트·텔레그램 연결·구독 (스테이션은 브라우저에서 등록)
   const user = await api("/api/users", { method: "POST" });
-  const { site } = await api("/api/sites", { method: "POST", user, body: { name: "브라우저 테스트 발전소" } });
+  const { site } = await api("/api/sites", { method: "POST", user, body: { name: "브라우저 테스트 발전소", ownerName: "테스터" } });
   const link = await api("/api/me/telegram-link", { method: "POST", user });
   if (!PROD) await fetch(API + "/api/telegram/webhook", {
     method: "POST",

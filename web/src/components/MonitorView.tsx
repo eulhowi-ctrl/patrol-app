@@ -13,6 +13,7 @@ import {
   reissueViewCode,
   removeStationAsUser,
   renameSite,
+  setOwnerName,
   setSubscription,
   snapshotUrl,
   viewerSocketUrl,
@@ -278,6 +279,12 @@ export default function MonitorView({ onBack }: { onBack?: () => void }) {
         <button className="st-chip" onClick={() => setPanel(true)}>설정</button>
       </div>
 
+      {me.sites.some((s) => s.canManage && !s.ownerName) && (
+        <div className="mt-notice">
+          개설자 이름이 등록되지 않은 사이트가 있습니다.{" "}
+          <button className="st-link" onClick={() => setPanel(true)}>설정에서 등록하기</button>
+        </div>
+      )}
       {!me.telegramLinked && (
         <div className="mt-notice">
           Telegram이 연결되지 않아 알림을 받을 수 없습니다.{" "}
@@ -367,17 +374,20 @@ function SiteJoin({ user, onDone }: { user: UserCreds; onDone: () => void }) {
     }
   };
 
+  const name = cleanNickname(nickname);
+
   return (
     <>
-      <label className="st-label">보안코드로 모니터링 참여</label>
-      {/* 이름 필수: 개설자가 참여자 목록에서 알아볼 수 있게 (공백만은 안 됨) */}
+      {/* 이름 필수: 참여할 때는 개설자에게, 만들 때는 참여자에게 표시 (공백·보이지 않는 문자만은 안 됨) */}
+      <label className="st-label">내 이름</label>
       <input
         className="st-input"
         value={nickname}
         maxLength={20}
-        placeholder="내 이름 (필수, 개설자에게 표시)"
+        placeholder="내 이름 (필수)"
         onChange={(e) => setNickname(e.target.value)}
       />
+      <label className="st-label">보안코드로 모니터링 참여</label>
       <div className="st-row">
         <input
           className="st-input st-code"
@@ -386,12 +396,11 @@ function SiteJoin({ user, onDone }: { user: UserCreds; onDone: () => void }) {
           placeholder="보안코드 8자리"
           onChange={(e) => setCode(e.target.value.toUpperCase().replace(/\s/g, ""))}
         />
-        <button className="st-btn st-primary" disabled={busy || code.length < 8 || !cleanNickname(nickname)} onClick={() => run(() => joinSite(user, code, cleanNickname(nickname)))}>
+        <button className="st-btn st-primary" disabled={busy || code.length < 8 || !name} onClick={() => run(() => joinSite(user, code, name))}>
           참여
         </button>
       </div>
-      {code.length === 8 && !cleanNickname(nickname) && <p className="st-muted">이름을 입력해야 참여할 수 있습니다.</p>}
-      <label className="st-label">새 사이트 만들기</label>
+      <label className="st-label">새 사이트 만들기 (내가 개설자)</label>
       <div className="st-row">
         <input
           className="st-input"
@@ -400,10 +409,13 @@ function SiteJoin({ user, onDone }: { user: UserCreds; onDone: () => void }) {
           placeholder="예: ○○발전소 1호기"
           onChange={(e) => setSiteName(e.target.value)}
         />
-        <button className="st-btn" disabled={busy || !siteName.trim()} onClick={() => run(() => createSite(user, siteName.trim()))}>
+        <button className="st-btn" disabled={busy || !siteName.trim() || !name} onClick={() => run(() => createSite(user, siteName.trim(), name))}>
           만들기
         </button>
       </div>
+      {!name && (code.length === 8 || siteName.trim()) && (
+        <p className="st-muted">이름을 입력해야 참여하거나 만들 수 있습니다.</p>
+      )}
       {error && <p className="st-error">{error}</p>}
     </>
   );
@@ -432,6 +444,14 @@ function SettingsPanel({
     } catch (e) {
       setError(e instanceof Error ? e.message : "요청 실패");
     }
+  };
+
+  const editOwnerName = (site: Me["sites"][number]) => {
+    const raw = window.prompt("개설자 이름 (참여자에게 표시)", site.ownerName ?? "");
+    if (raw === null) return; // 취소
+    const name = cleanNickname(raw);
+    if (!name) setError("이름을 입력해 주세요. 빈칸은 쓸 수 없습니다.");
+    else if (name !== site.ownerName) void run(() => setOwnerName(user, site.id, name));
   };
 
   const rename = (site: Me["sites"][number]) => {
@@ -504,6 +524,14 @@ function SettingsPanel({
           <div key={site.id} className="mt-site">
             <div className="st-row">
               <h4 style={{ margin: 0 }}>{site.name}</h4>
+              <span className="st-muted mt-owner">
+                개설자 {site.ownerName ?? "(이름 미등록)"}
+                {site.canManage && (
+                  <button className="st-link" onClick={() => editOwnerName(site)}>
+                    {site.ownerName ? " 변경" : " 등록"}
+                  </button>
+                )}
+              </span>
               <span className="mt-spacer" />
               {site.canManage ? (
                 <>

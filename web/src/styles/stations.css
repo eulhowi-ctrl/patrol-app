@@ -523,3 +523,9 @@ main.main-full {
   padding: 4px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
+
+/* 설정: 사이트 제목 옆 개설자 이름 */
+.mt-owner {
+  margin-left: 8px;
+  font-size: 13px;
+}
