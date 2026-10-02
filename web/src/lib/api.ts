@@ -124,7 +124,7 @@ export const createSite = (user: UserCreds, name: string) =>
     body: { name },
     user,
   });
-export const joinSite = (user: UserCreds, viewCode: string, nickname?: string) =>
+export const joinSite = (user: UserCreds, viewCode: string, nickname: string) =>
   call<{ site: { id: string; name: string } }>("/api/join", {
     method: "POST",
     body: { viewCode, nickname },

@@ -221,7 +221,9 @@ async function createSite(req: Request, env: Env, uid: string) {
 async function joinSite(req: Request, env: Env, uid: string) {
   const body = await readJson<{ viewCode?: string; nickname?: string }>(req);
   const code = (body?.viewCode ?? "").trim().toUpperCase();
-  const nickname = cleanName(body?.nickname, 20) || null;
+  // 이름 필수: 개설자가 참여자 목록에서 누군지 알아볼 수 있어야 한다 (공백만은 금지)
+  const nickname = cleanName(body?.nickname, 20);
+  if (!nickname) return err(400, "이름을 입력해야 참여할 수 있습니다.");
   const site = code
     ? await env.DB.prepare("SELECT id, name FROM sites WHERE view_code = ?")
         .bind(code)

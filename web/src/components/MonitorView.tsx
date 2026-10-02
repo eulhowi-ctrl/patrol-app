@@ -366,6 +366,14 @@ function SiteJoin({ user, onDone }: { user: UserCreds; onDone: () => void }) {
   return (
     <>
       <label className="st-label">보안코드로 모니터링 참여</label>
+      {/* 이름 필수: 개설자가 참여자 목록에서 알아볼 수 있게 (공백만은 안 됨) */}
+      <input
+        className="st-input"
+        value={nickname}
+        maxLength={20}
+        placeholder="내 이름 (필수, 개설자에게 표시)"
+        onChange={(e) => setNickname(e.target.value)}
+      />
       <div className="st-row">
         <input
           className="st-input st-code"
@@ -374,17 +382,11 @@ function SiteJoin({ user, onDone }: { user: UserCreds; onDone: () => void }) {
           placeholder="보안코드 8자리"
           onChange={(e) => setCode(e.target.value.toUpperCase().replace(/\s/g, ""))}
         />
-        <button className="st-btn st-primary" disabled={busy || code.length < 8} onClick={() => run(() => joinSite(user, code, nickname.trim()))}>
+        <button className="st-btn st-primary" disabled={busy || code.length < 8 || !nickname.trim()} onClick={() => run(() => joinSite(user, code, nickname.trim()))}>
           참여
         </button>
       </div>
-      <input
-        className="st-input"
-        value={nickname}
-        maxLength={20}
-        placeholder="내 이름 (선택, 개설자에게 표시)"
-        onChange={(e) => setNickname(e.target.value)}
-      />
+      {code.length === 8 && !nickname.trim() && <p className="st-muted">이름을 입력해야 참여할 수 있습니다.</p>}
       <label className="st-label">새 사이트 만들기</label>
       <div className="st-row">
         <input

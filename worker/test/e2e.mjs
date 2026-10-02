@@ -97,11 +97,15 @@ try {
   // 3) bob 참여 + 구독 범위 검증
   assert.equal((await api("/api/subscriptions", { method: "PUT", user: bob, body: { stationId: sA.stationId, on: true } })).status, 403);
   ok("사이트 미참여자는 구독 불가(403)");
-  const byInvite = await api("/api/join", { method: "POST", user: bob, body: { viewCode: site.inviteCode } });
+  const byInvite = await api("/api/join", { method: "POST", user: bob, body: { viewCode: site.inviteCode, nickname: "밥" } });
   assert.equal(byInvite.status, 404);
   assert.match(byInvite.data.error, /보안코드/);
-  assert.equal((await api("/api/join", { method: "POST", user: bob, body: { viewCode: "ZZZZZZZZ" } })).status, 404);
-  assert.equal((await api("/api/join", { method: "POST", user: bob, body: { viewCode: site.viewCode.toLowerCase() } })).status, 200);
+  assert.equal((await api("/api/join", { method: "POST", user: bob, body: { viewCode: "ZZZZZZZZ", nickname: "밥" } })).status, 404);
+  assert.equal((await api("/api/join", { method: "POST", user: bob, body: { viewCode: site.viewCode } })).status, 400);
+  assert.equal((await api("/api/join", { method: "POST", user: bob, body: { viewCode: site.viewCode, nickname: "   " } })).status, 400);
+  assert.equal((await api("/api/me", { user: bob })).data.sites.length, 0);
+  ok("이름 없이(빈칸·공백만) 참여 → 400, 참여 안 됨");
+  assert.equal((await api("/api/join", { method: "POST", user: bob, body: { viewCode: site.viewCode.toLowerCase(), nickname: "밥" } })).status, 200);
   ok("모니터링 참여는 보안코드로만 (초대코드·틀린 코드는 404)");
   const bobMe = (await api("/api/me", { user: bob })).data.sites[0];
   assert.equal(bobMe.inviteCode, null);
@@ -238,8 +242,8 @@ try {
   const re = await api(`/api/sites/${site.id}/view-code`, { method: "POST", user: alice });
   assert.equal(re.status, 200);
   assert.notEqual(re.data.viewCode, site.viewCode);
-  assert.equal((await api("/api/join", { method: "POST", user: outsider, body: { viewCode: site.viewCode } })).status, 404);
-  assert.equal((await api("/api/join", { method: "POST", user: outsider, body: { viewCode: re.data.viewCode } })).status, 200);
+  assert.equal((await api("/api/join", { method: "POST", user: outsider, body: { viewCode: site.viewCode, nickname: "외부" } })).status, 404);
+  assert.equal((await api("/api/join", { method: "POST", user: outsider, body: { viewCode: re.data.viewCode, nickname: "외부" } })).status, 200);
   assert.ok((await api("/api/me", { user: bob })).data.sites.some((x) => x.id === site.id));
   ok("보안코드 재발급: 이전 코드 무효, 새 코드로 참여, 기존 참여자 유지");
 
