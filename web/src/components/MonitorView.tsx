@@ -333,6 +333,7 @@ export default function MonitorView({ onBack }: { onBack?: () => void }) {
         <LiveView
           siteId={live.siteId}
           station={me.sites.find((s) => s.id === live.siteId)?.stations.find((s) => s.id === live.station.id) ?? live.station}
+          user={user}
           send={sendToSite}
           subscribe={subscribeSite}
           onClose={() => setLive(null)}

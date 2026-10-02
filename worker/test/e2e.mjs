@@ -198,6 +198,14 @@ try {
   assert.ok(await wait(() => viewerMsgs.some((m) => m.t === "muted" && m.stationId === sA.stationId)));
   ok("오탐 신고 콜백 → 음소거 + 알림");
 
+  // 녹화 막대용 위반 시각: 참여자만, 시각·유형만 (영상 아님)
+  const hist = await api(`/api/stations/${sA.stationId}/history?since=${Math.floor(Date.now() / 1000) - 3600}`, { user: bob });
+  assert.equal(hist.status, 200);
+  assert.ok(hist.data.events.length >= 1 && hist.data.events[0].labelKo && hist.data.events[0].at > 0);
+  const stranger = (await api("/api/users", { method: "POST" })).data;
+  assert.equal((await api(`/api/stations/${sA.stationId}/history`, { user: stranger })).status, 403);
+  ok("녹화 막대용 위반 시각 조회: 참여자만 (외부인 403)");
+
   // 9) 그룹 연결 + 분당 제한 묶음
   const groupSite = (await api("/api/sites", { method: "POST", user: alice, body: { name: "그룹 테스트", ownerName: "앨리스" } })).data.site;
   const sG = (await api("/api/stations", { method: "POST", body: { inviteCode: groupSite.inviteCode, name: "G1" } })).data;

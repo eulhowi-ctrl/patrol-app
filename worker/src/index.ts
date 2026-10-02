@@ -158,6 +158,8 @@ export default {
       if (mm && m === "POST") return await reissueViewCode(env, uid, mm[1]);
       mm = path.match(/^\/api\/sites\/([\w-]+)\/membership$/);
       if (mm && m === "DELETE") return await leaveSite(env, uid, mm[1]);
+      mm = path.match(/^\/api\/stations\/([\w-]+)\/history$/);
+      if (mm && m === "GET") return await stationHistory(env, uid, mm[1], url);
       mm = path.match(/^\/api\/sites\/([\w-]+)\/owner-name$/);
       if (mm && m === "PUT") return await setOwnerName(req, env, uid, mm[1]);
       mm = path.match(/^\/api\/sites\/([\w-]+)\/members$/);
@@ -491,6 +493,35 @@ async function reissueViewCode(env: Env, uid: string, siteId: string) {
     }
   }
   return err(500, "보안코드 생성 실패");
+}
+
+// 녹화 막대에 찍을 위반 시각 (사이트 참여자만). 영상이 아니라 시각·유형만.
+async function stationHistory(env: Env, uid: string, stationId: string, url: URL) {
+  const ok = await env.DB.prepare(
+    `SELECT 1 AS ok FROM stations st JOIN user_sites u ON u.site_id = st.site_id
+     WHERE st.id = ? AND u.user_id = ?`
+  )
+    .bind(stationId, uid)
+    .first();
+  if (!ok) return err(403, "참여하지 않은 사이트의 스테이션입니다.");
+  const since = Number(url.searchParams.get("since")) || nowSec() - 24 * 3600;
+  const rows = (
+    await env.DB.prepare(
+      `SELECT label, at, alerted, false_positive FROM events
+       WHERE station_id = ? AND at >= ? ORDER BY at DESC LIMIT 500`
+    )
+      .bind(stationId, since)
+      .all<{ label: string; at: number; alerted: number; false_positive: number }>()
+  ).results;
+  return json({
+    events: rows.map((r) => ({
+      label: r.label,
+      labelKo: LABEL_KO[r.label] ?? r.label,
+      at: r.at,
+      alerted: r.alerted === 1,
+      falsePositive: r.false_positive === 1,
+    })),
+  });
 }
 
 // 개설자 이름 등록·변경 (예전 사이트는 이름이 없어 앱에서 한 번 등록)

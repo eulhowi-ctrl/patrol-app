@@ -14,7 +14,8 @@ interface Attach {
   kicked?: boolean; // 내보낸 참여자 — 소켓이 완전히 닫히기 전이라도 아무것도 보내지 않는다
 }
 
-const TO_STATION = new Set(["live-start", "live-stop", "offer", "answer", "ice", "rtc-up"]);
+// rec-*: 녹화 재생 (영상 조각은 스테이션 폰에만 있고, 여기서는 중계만 하고 저장하지 않는다)
+const TO_STATION = new Set(["live-start", "live-stop", "offer", "answer", "ice", "rtc-up", "rec-list", "rec-get", "rec-ack", "rec-stop"]);
 // 끊기는 중인 소켓에 보내면 예외가 나서 허브 전체가 멈출 수 있다 — 개별 실패는 무시
 function safeSend(ws: WebSocket, text: string) {
   try {
@@ -24,7 +25,19 @@ function safeSend(ws: WebSocket, text: string) {
   }
 }
 
-const TO_VIEWER = new Set(["offer", "answer", "ice", "frame", "boxes", "live-error"]);
+const TO_VIEWER = new Set([
+  "offer",
+  "answer",
+  "ice",
+  "frame",
+  "boxes",
+  "live-error",
+  "rec-index",
+  "rec-begin",
+  "rec-chunk",
+  "rec-end",
+  "rec-error",
+]);
 
 export class SiteHub extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {

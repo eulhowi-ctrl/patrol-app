@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { MeStation } from "../lib/api";
+import type { MeStation, UserCreds } from "../lib/api";
+import RecordingView from "./RecordingView";
 import type { OverlayItem } from "../lib/overlay";
 
 // 칸을 눌렀을 때의 라이브 보기.
@@ -19,12 +20,14 @@ const textWidth = (t: string) => [...t].reduce((w, ch) => w + (/[ㄱ-힣]/.test(
 export default function LiveView({
   siteId,
   station,
+  user,
   send,
   subscribe,
   onClose,
 }: {
   siteId: string;
   station: MeStation;
+  user: UserCreds;
   send: (siteId: string, msg: unknown) => void;
   subscribe: (fn: (siteId: string, msg: SiteMessage) => void) => () => void;
   onClose: () => void;
@@ -34,11 +37,15 @@ export default function LiveView({
   const [mode, setMode] = useState<"connecting" | "photo" | "video">("connecting");
   const [message, setMessage] = useState<string | null>(null);
   const lastFrameAt = useRef(0);
+  const [tab, setTab] = useState<"live" | "rec">("live");
   const [boxes, setBoxes] = useState<{ items: OverlayItem[]; at: number }>({ items: [], at: 0 });
   const [videoSize, setVideoSize] = useState({ w: 16, h: 9 });
 
   useEffect(() => {
-    if (!station.online) return;
+    // 녹화 탭에서는 라이브를 끈다 (스테이션 부담·시청 한도 절약)
+    if (!station.online || tab !== "live") return;
+    setMode("connecting");
+    setFrame(null);
     let pc: RTCPeerConnection | null = null;
     const pendingIce: RTCIceCandidateInit[] = [];
 
@@ -112,7 +119,7 @@ export default function LiveView({
     };
     // 스테이션이 바뀌지 않는 동안 한 번만 시작
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [siteId, station.id, station.online]);
+  }, [siteId, station.id, station.online, tab]);
 
   return (
     <div className="lv-root" onClick={onClose}>
@@ -122,47 +129,57 @@ export default function LiveView({
         <span className="st-muted">
           {!station.online
             ? "오프라인"
-            : mode === "video"
+            : tab === "rec"
+              ? "녹화 다시보기"
+              : mode === "video"
               ? "실시간 영상"
               : mode === "photo"
                 ? "1초 간격 사진"
                 : "연결 중…"}
         </span>
         <span className="mt-spacer" />
+        <button className={`st-chip ${tab === "live" ? "on" : ""}`} onClick={() => setTab("live")}>실시간</button>
+        <button className={`st-chip ${tab === "rec" ? "on" : ""}`} onClick={() => setTab("rec")}>녹화</button>
         <button className="st-btn" onClick={onClose}>닫기</button>
       </div>
-      <div className="lv-body" onClick={(e) => e.stopPropagation()}>
-        {/* 영상과 SVG가 같은 틀을 같은 방식(contain)으로 채워 정확히 겹친다. 스테이션이 보낸 박스·문구·확률을 그린다 (사진 모드는 사진에 이미 그려져 옴) */}
-        <div className="lv-stage" style={{ display: mode === "video" ? "block" : "none" }}>
-          <video ref={videoRef} className="lv-video lv-fill" playsInline muted />
-          <svg className="lv-overlay" viewBox={`0 0 ${videoSize.w} ${videoSize.h}`} preserveAspectRatio="xMidYMid meet">
-            {boxes.items.map((it, i) => {
-              const W = videoSize.w;
-              const H = videoSize.h;
-              const fs = Math.max(11, W / 36);
-              const th = fs * 1.35;
-              const tw = textWidth(it.text) * fs + fs * 0.6;
-              const x = it.x * W;
-              const y = it.y * H;
-              const ty = y - th >= 0 ? y - th : y;
-              const tx = Math.min(Math.max(0, x), Math.max(0, W - tw));
-              return (
-                <g key={i}>
-                  <rect x={x} y={y} width={it.w * W} height={it.h * H} fill="none" stroke={it.color} strokeWidth={Math.max(2, W / 240)} />
-                  <rect x={tx} y={ty} width={tw} height={th} fill={it.color} />
-                  <text x={tx + fs * 0.3} y={ty + th * 0.75} fontSize={fs} fontWeight="bold" fill="#fff">
-                    {it.text}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
+      {tab === "rec" ? (
+        <div className="lv-body" onClick={(e) => e.stopPropagation()}>
+          <RecordingView siteId={siteId} station={station} user={user} send={send} subscribe={subscribe} />
         </div>
-        {mode !== "video" && frame && <img className="lv-video" src={frame} alt="" />}
-        {!station.online && <p className="st-muted">스테이션이 꺼져 있거나 네트워크가 끊겼습니다.</p>}
-        {station.online && !frame && mode === "connecting" && <p className="st-muted">스테이션에 연결하는 중…</p>}
-        {message && <p className="st-error">{message}</p>}
-      </div>
+      ) : (
+        <div className="lv-body" onClick={(e) => e.stopPropagation()}>
+          {/* 영상과 SVG가 같은 틀을 같은 방식(contain)으로 채워 정확히 겹친다. 스테이션이 보낸 박스·문구·확률을 그린다 (사진 모드는 사진에 이미 그려져 옴) */}
+          <div className="lv-stage" style={{ display: mode === "video" ? "block" : "none" }}>
+            <video ref={videoRef} className="lv-video lv-fill" playsInline muted />
+            <svg className="lv-overlay" viewBox={`0 0 ${videoSize.w} ${videoSize.h}`} preserveAspectRatio="xMidYMid meet">
+              {boxes.items.map((it, i) => {
+                const W = videoSize.w;
+                const H = videoSize.h;
+                const fs = Math.max(11, W / 36);
+                const th = fs * 1.35;
+                const tw = textWidth(it.text) * fs + fs * 0.6;
+                const x = it.x * W;
+                const y = it.y * H;
+                const ty = y - th >= 0 ? y - th : y;
+                const tx = Math.min(Math.max(0, x), Math.max(0, W - tw));
+                return (
+                  <g key={i}>
+                    <rect x={x} y={y} width={it.w * W} height={it.h * H} fill="none" stroke={it.color} strokeWidth={Math.max(2, W / 240)} />
+                    <rect x={tx} y={ty} width={tw} height={th} fill={it.color} />
+                    <text x={tx + fs * 0.3} y={ty + th * 0.75} fontSize={fs} fontWeight="bold" fill="#fff">
+                      {it.text}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+          {mode !== "video" && frame && <img className="lv-video" src={frame} alt="" />}
+          {!station.online && <p className="st-muted">스테이션이 꺼져 있거나 네트워크가 끊겼습니다.</p>}
+          {station.online && !frame && mode === "connecting" && <p className="st-muted">스테이션에 연결하는 중…</p>}
+          {message && <p className="st-error">{message}</p>}
+        </div>
+      )}
     </div>
   );
 }

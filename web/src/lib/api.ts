@@ -170,6 +170,17 @@ export const getTelegramLink = (user: UserCreds) =>
     user,
   });
 
+// 녹화 막대에 표시할 위반 시각 (최근 24시간)
+export interface HistoryEvent {
+  label: string;
+  labelKo: string;
+  at: number; // 초
+  alerted: boolean;
+  falsePositive: boolean;
+}
+export const getStationHistory = (user: UserCreds, stationId: string, sinceSec: number) =>
+  call<{ events: HistoryEvent[] }>(`/api/stations/${stationId}/history?since=${sinceSec}`, { user });
+
 export const snapshotUrl = (stationId: string, version: number) =>
   `${API_BASE}/api/stations/${stationId}/snapshot?v=${version}`;
 

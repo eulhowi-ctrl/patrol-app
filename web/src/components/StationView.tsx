@@ -12,6 +12,10 @@ import {
 } from "../lib/api";
 import type { ClothingAttributes, DetectionBox } from "../lib/labels";
 import { buildOverlay, drawOverlay, type OverlayItem } from "../lib/overlay";
+import { loadRecConfig } from "../lib/recPolicy";
+import { StationRecorder, type RecStatus } from "../lib/recorder";
+import { RecServer } from "../lib/recServe";
+import { clearAll as clearRecordings } from "../lib/recStore";
 import { ViolationTracker } from "../lib/violationTracker";
 import {
   fitRect,
@@ -159,6 +163,13 @@ function StationRunner({
   const [lastReport, setLastReport] = useState<string | null>(null);
   const [shown, setShown] = useState<{ items: OverlayItem[]; at: number }>({ items: [], at: 0 }); // 화면에 그릴 감지 박스
   const [now, setNow] = useState(Date.now());
+  // 녹화 (스테이션 폰 안에만 24시간 보관)
+  const [recOn, setRecOn] = useState(true);
+  const [recStatus, setRecStatus] = useState<RecStatus | null>(null);
+  const [streamVersion, setStreamVersion] = useState(0); // 카메라 스트림이 바뀌면 녹화기도 새로
+  const recCfgRef = useRef(loadRecConfig());
+  const recorderRef = useRef<StationRecorder | null>(null);
+  const recServerRef = useRef<RecServer | null>(null);
 
   // 콜백 안에서 최신 값을 읽기 위한 ref
   const clothingRef = useRef(false);
@@ -170,6 +181,7 @@ function StationRunner({
     setZone(loadZone());
     try {
       setClothingOn(localStorage.getItem("argus-clothing-v1") === "1");
+      setRecOn(localStorage.getItem("argus-rec-on") !== "0");
     } catch {
       /* 무시 */
     }
@@ -321,6 +333,7 @@ function StationRunner({
         if (cancelled) return stream.getTracks().forEach((t) => t.stop());
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = stream;
+        setStreamVersion((n) => n + 1);
         const v = videoRef.current;
         if (v) {
           v.srcObject = stream;
@@ -413,9 +426,15 @@ function StationRunner({
     liveRef.current.delete(conn);
   }, []);
 
+  // 라이브 + 녹화 재생을 합친 동시 시청 연결 수 (같은 사람은 1명으로)
+  const viewerFull = useCallback((conn: string) => {
+    const conns = new Set([...liveRef.current.keys(), ...(recServerRef.current?.conns ?? [])]);
+    return !conns.has(conn) && conns.size >= MAX_LIVE_SESSIONS;
+  }, []);
+
   const startLive = useCallback(
     (conn: string, rtc: boolean) => {
-      if (liveRef.current.size >= MAX_LIVE_SESSIONS) {
+      if (viewerFull(conn)) {
         sendWs({ t: "live-error", to: conn, message: "동시 시청 한도에 도달했습니다." });
         return;
       }
@@ -448,12 +467,30 @@ function StationRunner({
           .catch(() => undefined);
       }
     },
-    [capture, sendWs, stopLive]
+    [capture, sendWs, stopLive, viewerFull]
   );
+
+  // 녹화 재생 송출기 (한 번만 생성)
+  if (!recServerRef.current) {
+    recServerRef.current = new RecServer(
+      sendWs,
+      recCfgRef.current,
+      () => !inflightRef.current && (wsRef.current?.bufferedAmount ?? 0) < 400_000,
+      () => recorderRef.current?.currentStart ?? null
+    );
+  }
 
   const handleWsMessage = useCallback(
     (raw: string) => {
-      let msg: { t?: string; from?: string; sdp?: string; candidate?: RTCIceCandidateInit; rtc?: boolean };
+      let msg: {
+        t?: string;
+        from?: string;
+        sdp?: string;
+        candidate?: RTCIceCandidateInit;
+        rtc?: boolean;
+        start?: number;
+        seq?: number;
+      };
       try {
         msg = JSON.parse(raw);
       } catch {
@@ -466,8 +503,19 @@ function StationRunner({
       }
       const conn = msg.from;
       if (!conn) return;
+      const rec = recServerRef.current;
       if (msg.t === "live-start") startLive(conn, !!msg.rtc);
-      else if (msg.t === "live-stop" || msg.t === "viewer-gone") stopLive(conn);
+      else if (msg.t === "live-stop") stopLive(conn);
+      else if (msg.t === "viewer-gone") {
+        stopLive(conn);
+        rec?.stop(conn);
+      } else if (msg.t === "rec-list") void rec?.list(conn);
+      else if (msg.t === "rec-get" && typeof msg.start === "number") {
+        if (viewerFull(conn)) sendWs({ t: "rec-error", to: conn, start: msg.start, message: "동시 시청 한도에 도달했습니다." });
+        else void rec?.get(conn, msg.start);
+      } else if (msg.t === "rec-ack" && typeof msg.start === "number" && typeof msg.seq === "number") {
+        rec?.ack(conn, msg.start, msg.seq);
+      } else if (msg.t === "rec-stop") rec?.stop(conn);
       else if (msg.t === "answer" && msg.sdp) {
         void liveRef.current.get(conn)?.pc?.setRemoteDescription({ type: "answer", sdp: msg.sdp }).catch(() => undefined);
       } else if (msg.t === "ice" && msg.candidate) {
@@ -480,7 +528,7 @@ function StationRunner({
         }
       }
     },
-    [startLive, stopLive]
+    [startLive, stopLive, viewerFull, sendWs]
   );
   const onRemovedRef = useRef(onRemoved);
   onRemovedRef.current = onRemoved;
@@ -509,6 +557,7 @@ function StationRunner({
         if (ping) clearInterval(ping);
         setWsState("off");
         liveRef.current.forEach((_, k) => stopLive(k));
+        recServerRef.current?.stopAll();
         if (closed) return;
         if (ev.code === 1008 || ev.code === 4401) return;
         timer = setTimeout(connect, Math.min(30000, 1000 * 2 ** retry++));
@@ -551,6 +600,39 @@ function StationRunner({
   const rect = fitRect(stageSize.w, stageSize.h, stageSize.vw, stageSize.vh);
   const zoneActive = isZoneActive(zone, now);
   const zoneMin = zoneActive ? Math.max(0, Math.ceil((zone.expiresAt - now) / 60000)) : 0;
+
+  // ── 상시 녹화 (카메라가 바뀌거나 녹화를 끄면 다시 시작/중지) ──
+  useEffect(() => {
+    const stream = streamRef.current;
+    if (!recOn || !stream) {
+      setRecStatus(null);
+      return;
+    }
+    const r = new StationRecorder(stream, recCfgRef.current, setRecStatus);
+    recorderRef.current = r;
+    void r.start();
+    return () => {
+      r.stop();
+      if (recorderRef.current === r) recorderRef.current = null;
+    };
+  }, [recOn, streamVersion]);
+
+  const toggleRec = () => {
+    const next = !recOn;
+    setRecOn(next);
+    try {
+      localStorage.setItem("argus-rec-on", next ? "1" : "0");
+    } catch {
+      /* 무시 */
+    }
+  };
+
+  const wipeRecordings = async () => {
+    if (!confirm("이 기기에 저장된 녹화를 모두 지울까요? 되돌릴 수 없습니다.")) return;
+    await clearRecordings();
+    void recorderRef.current?.sweep();
+    if (!recorderRef.current) setRecStatus(null);
+  };
 
   const toggleClothing = () => {
     const next = !clothingOn;
@@ -635,6 +717,7 @@ function StationRunner({
         </span>
         <span className="st-muted">
           {wsState === "on" ? "서버 연결됨" : "서버 연결 끊김 — 재시도 중"} · {modelReady ? "감시 중" : "모델 로딩…"}
+          {recStatus?.recording && <span className="st-rec"> · ● 녹화</span>}
         </span>
       </div>
       {error && <div className="st-banner">{error}</div>}
@@ -659,7 +742,13 @@ function StationRunner({
           <button className="st-btn" onClick={() => setSaver(true)}>
             절전 화면
           </button>
-          <button className="st-btn" onClick={() => setMenuOpen((v) => !v)}>
+          <button
+            className="st-btn"
+            onClick={() => {
+              if (!menuOpen) void recorderRef.current?.sweep(); // 녹화 사용량 바로 갱신
+              setMenuOpen((v) => !v);
+            }}
+          >
             설정
           </button>
         </div>
@@ -671,6 +760,22 @@ function StationRunner({
             <input type="checkbox" checked={clothingOn} onChange={toggleClothing} />
             복장 규정 감지 (긴팔·긴바지·안전그네) — 오탐이 늘 수 있어 기본 꺼짐
           </label>
+          <label className="st-check">
+            <input type="checkbox" checked={recOn} onChange={toggleRec} />
+            녹화 (이 기기에만 24시간 보관, 360p) — 모니터링에서 시각을 골라 다시 볼 수 있음
+          </label>
+          {recOn && (
+            <p className="st-muted">
+              {recStatus?.error
+                ? recStatus.error
+                : recStatus
+                  ? `저장 ${recStatus.bytes >= 1e9 ? `${(recStatus.bytes / 1e9).toFixed(2)}GB` : `${Math.round(recStatus.bytes / 1e6)}MB`}${
+                      recStatus.oldest ? ` · 가장 오래된 ${new Date(recStatus.oldest).toLocaleString("ko-KR")}` : ""
+                    }`
+                  : "녹화 준비 중…"}{" "}
+              <button className="st-link" onClick={() => void wipeRecordings()}>녹화 모두 지우기</button>
+            </p>
+          )}
           <button
             className="st-btn"
             onClick={() => {

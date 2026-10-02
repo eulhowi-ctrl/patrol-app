@@ -473,6 +473,26 @@ main.main-full {
   gap: 8px;
   padding: 10px 12px;
 }
+/* 좁은 폰에서도 한 줄: 이름은 말줄임, 버튼 글자는 줄바꿈 안 함 */
+.lv-head strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lv-head .st-muted {
+  white-space: nowrap;
+}
+.lv-head .st-chip,
+.lv-head .st-btn {
+  flex: none;
+  white-space: nowrap;
+}
+@media (max-width: 480px) {
+  .lv-head .st-muted {
+    display: none;
+  }
+}
 
 .lv-body {
   flex: 1;
@@ -528,4 +548,105 @@ main.main-full {
 .mt-owner {
   margin-left: 8px;
   font-size: 13px;
+}
+
+/* 스테이션 상단 녹화 표시 */
+.st-rec {
+  color: #f56565;
+}
+
+/* ── 녹화 다시보기 ── */
+.rv-root {
+  width: 100%;
+  max-width: 900px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  max-height: 100%;
+}
+.rv-video {
+  width: 100%;
+  max-height: 55vh;
+}
+.rv-now {
+  font-weight: 700;
+}
+.rv-status {
+  margin: 0;
+}
+/* 24시간 막대: 회색 = 녹화 구간, 빨간 점 = 위반, 흰 선 = 지금 보는 위치 */
+.rv-bar {
+  position: relative;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.rv-range {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  min-width: 2px;
+  background: #4a5568;
+  border-radius: 3px;
+  pointer-events: none;
+}
+.rv-ev {
+  position: absolute;
+  top: 9px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-radius: 50%;
+  background: #f56565;
+  pointer-events: none;
+}
+.rv-ev.fp {
+  background: #718096;
+}
+.rv-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: #fff;
+  pointer-events: none;
+}
+.rv-ticks {
+  position: relative;
+  height: 16px;
+  font-size: 11px;
+  color: #a0aec0;
+}
+.rv-ticks span {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.rv-controls .st-input {
+  flex: 0 1 140px;
+}
+.rv-events {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rv-event {
+  text-align: left;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: inherit;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.rv-ev-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f56565;
 }
