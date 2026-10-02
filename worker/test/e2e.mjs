@@ -84,7 +84,8 @@ try {
   const bob = (await api("/api/users", { method: "POST" })).data;
   const site = (await api("/api/sites", { method: "POST", user: alice, body: { name: "테스트 발전소" } })).data.site;
   assert.match(site.inviteCode, /^[A-Z2-9]{6}$/);
-  ok("사용자·사이트 생성, 초대코드 발급");
+  assert.match(site.viewCode, /^[A-Z2-9]{8}$/);
+  ok("사용자·사이트 생성, 초대코드·보안코드 발급");
 
   // 2) 스테이션 등록 (초대코드)
   assert.equal((await api("/api/stations", { method: "POST", body: { inviteCode: "ZZZZZZ", name: "x" } })).status, 404);
@@ -96,7 +97,16 @@ try {
   // 3) bob 참여 + 구독 범위 검증
   assert.equal((await api("/api/subscriptions", { method: "PUT", user: bob, body: { stationId: sA.stationId, on: true } })).status, 403);
   ok("사이트 미참여자는 구독 불가(403)");
-  await api("/api/join", { method: "POST", user: bob, body: { inviteCode: site.inviteCode.toLowerCase() } });
+  const byInvite = await api("/api/join", { method: "POST", user: bob, body: { viewCode: site.inviteCode } });
+  assert.equal(byInvite.status, 404);
+  assert.match(byInvite.data.error, /보안코드/);
+  assert.equal((await api("/api/join", { method: "POST", user: bob, body: { viewCode: "ZZZZZZZZ" } })).status, 404);
+  assert.equal((await api("/api/join", { method: "POST", user: bob, body: { viewCode: site.viewCode.toLowerCase() } })).status, 200);
+  ok("모니터링 참여는 보안코드로만 (초대코드·틀린 코드는 404)");
+  const bobMe = (await api("/api/me", { user: bob })).data.sites[0];
+  assert.equal(bobMe.inviteCode, null);
+  assert.equal(bobMe.viewCode, null);
+  ok("참여자에게는 코드가 보이지 않음");
   await api("/api/subscriptions", { method: "PUT", user: bob, body: { stationId: sA.stationId, on: true } });
   await api("/api/subscriptions", { method: "PUT", user: alice, body: { stationId: sA.stationId, on: true } });
   await api("/api/subscriptions", { method: "PUT", user: alice, body: { stationId: sB.stationId, on: true } });
@@ -174,7 +184,7 @@ try {
   // 9) 그룹 연결 + 분당 제한 묶음
   const groupSite = (await api("/api/sites", { method: "POST", user: alice, body: { name: "그룹 테스트" } })).data.site;
   const sG = (await api("/api/stations", { method: "POST", body: { inviteCode: groupSite.inviteCode, name: "G1" } })).data;
-  await webhook({ message: { chat: { id: -900, type: "group" }, text: "/link@argus_bot " + groupSite.inviteCode } });
+  await webhook({ message: { chat: { id: -900, type: "group" }, text: "/link@argus_bot " + groupSite.viewCode } });
   await sleep(500);
   calls.length = 0;
   const labels = ["no_helmet", "no_vest", "no_mask", "no_safety_glasses", "no_harness", "short_sleeve", "short_pants", "fire_smoke", "man_down", "zone_intrusion"];
@@ -218,9 +228,27 @@ try {
   cWs.onmessage = (e) => cMsgs.push(e.data);
   const outsider = (await api("/api/users", { method: "POST" })).data;
   assert.equal((await api(`/api/stations/${sC.stationId}`, { method: "DELETE", user: outsider })).status, 403);
-  assert.equal((await api(`/api/stations/${sC.stationId}`, { method: "DELETE", user: bob })).status, 200);
+  assert.equal((await api(`/api/stations/${sC.stationId}`, { method: "DELETE", user: bob })).status, 403);
+  assert.equal((await api(`/api/stations/${sC.stationId}`, { method: "DELETE", user: alice })).status, 200);
   assert.ok(await wait(() => cMsgs.some((m) => m.includes('"removed"'))));
-  ok("참여자가 스테이션 삭제 → 기기에 removed 전달 (외부인은 403)");
+  ok("관리자가 스테이션 삭제 → 기기에 removed 전달 (참여자·외부인은 403)");
+
+  // 보안코드 재발급: 관리자만, 이전 코드 무효, 기존 참여자 유지
+  assert.equal((await api(`/api/sites/${site.id}/view-code`, { method: "POST", user: bob })).status, 403);
+  const re = await api(`/api/sites/${site.id}/view-code`, { method: "POST", user: alice });
+  assert.equal(re.status, 200);
+  assert.notEqual(re.data.viewCode, site.viewCode);
+  assert.equal((await api("/api/join", { method: "POST", user: outsider, body: { viewCode: site.viewCode } })).status, 404);
+  assert.equal((await api("/api/join", { method: "POST", user: outsider, body: { viewCode: re.data.viewCode } })).status, 200);
+  assert.ok((await api("/api/me", { user: bob })).data.sites.some((x) => x.id === site.id));
+  ok("보안코드 재발급: 이전 코드 무효, 새 코드로 참여, 기존 참여자 유지");
+
+  // 참여자 나가기
+  await api("/api/subscriptions", { method: "PUT", user: outsider, body: { stationId: sA.stationId, on: true } });
+  assert.equal((await api(`/api/sites/${site.id}/membership`, { method: "DELETE", user: outsider })).status, 200);
+  assert.equal((await api("/api/me", { user: outsider })).data.sites.length, 0);
+  assert.equal((await api("/api/subscriptions", { method: "PUT", user: outsider, body: { stationId: sA.stationId, on: true } })).status, 403);
+  ok("참여자 목록에서 빼기 → 사이트·구독 해제");
 
   // 사이트 삭제: 소유자만, 스테이션·구독 함께 정리
   assert.equal((await api(`/api/sites/${site.id}`, { method: "DELETE", user: bob })).status, 403);

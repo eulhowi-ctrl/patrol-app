@@ -49,8 +49,8 @@ function randomToken(bytes = 24): string {
 
 // 헷갈리는 글자(0/O, 1/I) 제외
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-function inviteCode(): string {
-  const a = crypto.getRandomValues(new Uint8Array(6));
+function inviteCode(len = 6): string {
+  const a = crypto.getRandomValues(new Uint8Array(len));
   return [...a].map((b) => CODE_CHARS[b % CODE_CHARS.length]).join("");
 }
 
@@ -148,6 +148,10 @@ export default {
       mm = path.match(/^\/api\/sites\/([\w-]+)$/);
       if (mm && m === "PUT") return await renameSite(req, env, uid, mm[1]);
       if (mm && m === "DELETE") return await deleteSite(env, uid, mm[1]);
+      mm = path.match(/^\/api\/sites\/([\w-]+)\/view-code$/);
+      if (mm && m === "POST") return await reissueViewCode(env, uid, mm[1]);
+      mm = path.match(/^\/api\/sites\/([\w-]+)\/membership$/);
+      if (mm && m === "DELETE") return await leaveSite(env, uid, mm[1]);
 
       return err(404, "없는 경로입니다.");
     } catch (e) {
@@ -192,14 +196,15 @@ async function createSite(req: Request, env: Env, uid: string) {
   const id = crypto.randomUUID().slice(0, 12);
   for (let i = 0; i < 5; i++) {
     const code = inviteCode();
+    const viewCode = inviteCode(8);
     try {
       await env.DB.batch([
         env.DB.prepare(
-          "INSERT INTO sites (id, name, invite_code, created_at, owner_id) VALUES (?, ?, ?, ?, ?)"
-        ).bind(id, name, code, nowSec(), uid),
+          "INSERT INTO sites (id, name, invite_code, view_code, created_at, owner_id) VALUES (?, ?, ?, ?, ?, ?)"
+        ).bind(id, name, code, viewCode, nowSec(), uid),
         env.DB.prepare("INSERT INTO user_sites (user_id, site_id) VALUES (?, ?)").bind(uid, id),
       ]);
-      return json({ site: { id, name, inviteCode: code } });
+      return json({ site: { id, name, inviteCode: code, viewCode } });
     } catch {
       // 초대코드 충돌 시 재시도
     }
@@ -207,13 +212,26 @@ async function createSite(req: Request, env: Env, uid: string) {
   return err(500, "초대코드 생성 실패");
 }
 
+// 모니터링 참여는 보안코드로만. 초대코드(스테이션 등록용)로는 사진·라이브를 볼 수 없다.
 async function joinSite(req: Request, env: Env, uid: string) {
-  const body = await readJson<{ inviteCode?: string }>(req);
-  const code = (body?.inviteCode ?? "").trim().toUpperCase();
-  const site = await env.DB.prepare("SELECT id, name FROM sites WHERE invite_code = ?")
-    .bind(code)
-    .first<{ id: string; name: string }>();
-  if (!site) return err(404, "초대코드를 찾을 수 없습니다.");
+  const body = await readJson<{ viewCode?: string }>(req);
+  const code = (body?.viewCode ?? "").trim().toUpperCase();
+  const site = code
+    ? await env.DB.prepare("SELECT id, name FROM sites WHERE view_code = ?")
+        .bind(code)
+        .first<{ id: string; name: string }>()
+    : null;
+  if (!site) {
+    const isInvite = code
+      ? await env.DB.prepare("SELECT 1 AS ok FROM sites WHERE invite_code = ?").bind(code).first()
+      : null;
+    return err(
+      404,
+      isInvite
+        ? "스테이션 등록용 초대코드입니다. 모니터링은 사이트 관리자에게 받은 보안코드(8자리)로 참여하세요."
+        : "보안코드를 찾을 수 없습니다."
+    );
+  }
   await env.DB.prepare("INSERT OR IGNORE INTO user_sites (user_id, site_id) VALUES (?, ?)")
     .bind(uid, site.id)
     .run();
@@ -227,10 +245,10 @@ async function getMe(env: Env, uid: string) {
 
   const sites = (
     await env.DB.prepare(
-      "SELECT s.id, s.name, s.invite_code, s.owner_id FROM sites s JOIN user_sites u ON u.site_id = s.id WHERE u.user_id = ?"
+      "SELECT s.id, s.name, s.invite_code, s.view_code, s.owner_id FROM sites s JOIN user_sites u ON u.site_id = s.id WHERE u.user_id = ?"
     )
       .bind(uid)
-      .all<{ id: string; name: string; invite_code: string; owner_id: string | null }>()
+      .all<{ id: string; name: string; invite_code: string; view_code: string | null; owner_id: string | null }>()
   ).results;
 
   const stations = (
@@ -266,11 +284,15 @@ async function getMe(env: Env, uid: string) {
   return json({
     telegramLinked: !!user?.telegram_chat_id,
     limits: { maxStations: Number(env.MAX_STATIONS), stationCount: total?.n ?? 0 },
-    sites: sites.map((s) => ({
+    sites: sites.map((s) => {
+      // 코드는 관리자에게만 보여준다 (참여자가 코드를 퍼뜨리지 못하게)
+      const canManage = s.owner_id === null || s.owner_id === uid;
+      return {
       id: s.id,
       name: s.name,
-      inviteCode: s.invite_code,
-      canManage: s.owner_id === null || s.owner_id === uid,
+      inviteCode: canManage ? s.invite_code : null,
+      viewCode: canManage ? s.view_code : null,
+      canManage,
       stations: stations
         .filter((st) => st.site_id === s.id)
         .map((st) => ({
@@ -282,7 +304,8 @@ async function getMe(env: Env, uid: string) {
           snapshotAt: st.snap_at ?? 0,
           subscribed: subs.has(st.id),
         })),
-    })),
+      };
+    }),
   });
 }
 
@@ -346,7 +369,8 @@ async function createStation(req: Request, env: Env) {
   return json({ stationId: id, stationToken: token, siteId: site.id, siteName: site.name, name });
 }
 
-// 스테이션 삭제: 그 기기 본인(스테이션 토큰) 또는 사이트 참여자(모니터링 화면에서 정리)
+// 스테이션 삭제: 그 기기 본인(스테이션 토큰) 또는 사이트 관리자(모니터링 화면에서 정리).
+// 보안코드로 들어온 참여자는 보기만 가능.
 async function deleteStation(req: Request, env: Env, stationId: string) {
   let siteId: string | null = null;
   const st = await authStation(env, stationId, req.headers.get("x-station-token"));
@@ -356,12 +380,14 @@ async function deleteStation(req: Request, env: Env, stationId: string) {
     const uid = await authUser(req, env);
     if (!uid) return err(401, "인증 실패");
     const row = await env.DB.prepare(
-      `SELECT st.site_id FROM stations st JOIN user_sites u ON u.site_id = st.site_id
-       WHERE st.id = ? AND u.user_id = ?`
+      `SELECT st.site_id FROM stations st
+       JOIN sites s ON s.id = st.site_id
+       JOIN user_sites u ON u.site_id = st.site_id
+       WHERE st.id = ? AND u.user_id = ? AND (s.owner_id IS NULL OR s.owner_id = ?)`
     )
-      .bind(stationId, uid)
+      .bind(stationId, uid, uid)
       .first<{ site_id: string }>();
-    if (!row) return err(403, "삭제 권한이 없습니다.");
+    if (!row) return err(403, "삭제 권한이 없습니다. 사이트 관리자만 삭제할 수 있습니다.");
     siteId = row.site_id;
   }
   await removeStationRows(env, [stationId]);
@@ -427,6 +453,32 @@ async function deleteSite(env: Env, uid: string, siteId: string) {
   await kick(env, siteId);
   await broadcast(env, siteId, { t: "site-removed" });
   return json({ ok: true, removedStations: ids.length });
+}
+
+// 보안코드 재발급: 이전 코드는 즉시 무효. 이미 참여한 사람은 유지된다.
+async function reissueViewCode(env: Env, uid: string, siteId: string) {
+  if (!(await manageableSite(env, uid, siteId))) return err(403, "재발급 권한이 없습니다.");
+  for (let i = 0; i < 5; i++) {
+    const viewCode = inviteCode(8);
+    try {
+      await env.DB.prepare("UPDATE sites SET view_code = ? WHERE id = ?").bind(viewCode, siteId).run();
+      return json({ viewCode });
+    } catch {
+      // 충돌 시 재시도
+    }
+  }
+  return err(500, "보안코드 생성 실패");
+}
+
+// 참여자가 모니터링 목록에서 사이트를 뺀다 (사이트 자체는 남음)
+async function leaveSite(env: Env, uid: string, siteId: string) {
+  await env.DB.batch([
+    env.DB.prepare(
+      "DELETE FROM subscriptions WHERE user_id = ? AND station_id IN (SELECT id FROM stations WHERE site_id = ?)"
+    ).bind(uid, siteId),
+    env.DB.prepare("DELETE FROM user_sites WHERE user_id = ? AND site_id = ?").bind(uid, siteId),
+  ]);
+  return json({ ok: true });
 }
 
 async function getSnapshot(env: Env, stationId: string, url: URL) {
@@ -665,12 +717,12 @@ async function processTelegram(env: Env, update: TgUpdate) {
     return void (await sendMessage(env, chatId, "ARGUS 안전 알림 봇입니다. 앱의 '알림 연결' 버튼으로 연결하세요."));
   }
 
-  // 그룹: /link 초대코드 → 사이트 전체 알림 수신
+  // 그룹: /link 보안코드 → 사이트 전체 알림 수신 (사진이 오므로 모니터링과 같은 보안코드 사용)
   if (cmd === "/link" && arg) {
-    const site = await env.DB.prepare("SELECT id, name FROM sites WHERE invite_code = ?")
+    const site = await env.DB.prepare("SELECT id, name FROM sites WHERE view_code = ?")
       .bind(arg.toUpperCase())
       .first<{ id: string; name: string }>();
-    if (!site) return void (await sendMessage(env, chatId, "초대코드를 찾을 수 없습니다."));
+    if (!site) return void (await sendMessage(env, chatId, "보안코드를 찾을 수 없습니다. 앱 설정의 8자리 보안코드를 보내세요."));
     await env.DB.prepare(
       `INSERT INTO group_links (chat_id, site_id) VALUES (?, ?)
        ON CONFLICT(chat_id) DO UPDATE SET site_id = excluded.site_id`

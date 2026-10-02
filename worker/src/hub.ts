@@ -14,7 +14,7 @@ interface Attach {
 }
 
 const TO_STATION = new Set(["live-start", "live-stop", "offer", "answer", "ice", "rtc-up"]);
-const TO_VIEWER = new Set(["offer", "answer", "ice", "frame", "live-error"]);
+const TO_VIEWER = new Set(["offer", "answer", "ice", "frame", "boxes", "live-error"]);
 
 export class SiteHub extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {

@@ -133,9 +133,9 @@ try {
   log("사이트 이름 변경");
 
   // ── 사이트 삭제 → 참여 사이트가 없으니 시작 화면 ──
-  await mo.getByRole("button", { name: "사이트 삭제" }).click();
+  await mo.getByRole("button", { name: "모니터링 삭제" }).click();
   await mo.waitForSelector("text=모니터링 시작", { timeout: 10000 });
-  log("사이트 삭제 → 모니터링 시작 화면");
+  log("모니터링 삭제 → 모니터링 시작 화면");
 } catch (e) {
   failed = true;
   console.error("\n✗ 실패:", e.message);

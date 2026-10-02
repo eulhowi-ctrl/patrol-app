@@ -7,6 +7,8 @@ import {
   getMe,
   getTelegramLink,
   joinSite,
+  leaveSite,
+  reissueViewCode,
   removeStationAsUser,
   renameSite,
   setSubscription,
@@ -275,8 +277,14 @@ export default function MonitorView({ onBack }: { onBack?: () => void }) {
 
       {tiles.length === 0 ? (
         <div className="st-page st-muted">
-          아직 등록된 스테이션이 없습니다. 현장 기기에서 '스테이션으로 쓰기'를 열고 초대코드{" "}
-          <b>{me.sites[0].inviteCode}</b>로 등록하세요.
+          아직 등록된 스테이션이 없습니다.{" "}
+          {me.sites[0].inviteCode ? (
+            <>
+              현장 기기에서 '스테이션으로 쓰기'를 열고 초대코드 <b>{me.sites[0].inviteCode}</b>로 등록하세요.
+            </>
+          ) : (
+            "사이트 관리자가 스테이션을 등록하면 여기에 보입니다."
+          )}
         </div>
       ) : (
         <div className="mt-grid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
@@ -350,16 +358,16 @@ function SiteJoin({ user, onDone }: { user: UserCreds; onDone: () => void }) {
 
   return (
     <>
-      <label className="st-label">초대코드로 사이트 참여</label>
+      <label className="st-label">보안코드로 모니터링 참여</label>
       <div className="st-row">
         <input
           className="st-input st-code"
           value={code}
-          maxLength={6}
-          placeholder="초대코드 6자리"
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          maxLength={8}
+          placeholder="보안코드 8자리"
+          onChange={(e) => setCode(e.target.value.toUpperCase().replace(/\s/g, ""))}
         />
-        <button className="st-btn st-primary" disabled={busy || code.length < 6} onClick={() => run(() => joinSite(user, code))}>
+        <button className="st-btn st-primary" disabled={busy || code.length < 8} onClick={() => run(() => joinSite(user, code))}>
           참여
         </button>
       </div>
@@ -423,6 +431,18 @@ function SettingsPanel({
     }
   };
 
+  const leave = (site: Me["sites"][number]) => {
+    if (window.confirm(`'${site.name}'을(를) 내 모니터링에서 뺄까요? 다시 보려면 보안코드가 필요합니다.`)) {
+      void run(() => leaveSite(user, site.id));
+    }
+  };
+
+  const reissue = (site: Me["sites"][number]) => {
+    if (window.confirm("보안코드를 새로 만들까요? 이전 코드로는 더 이상 참여할 수 없습니다. (이미 참여한 사람은 유지)")) {
+      void run(() => reissueViewCode(user, site.id));
+    }
+  };
+
   const removeStation = (st: MeStation) => {
     if (window.confirm(`스테이션 '${st.name}'을(를) 삭제할까요? 해당 기기는 등록이 해제됩니다.`)) {
       void run(() => removeStationAsUser(user, st.id));
@@ -465,34 +485,46 @@ function SettingsPanel({
             <div className="st-row">
               <h4 style={{ margin: 0 }}>{site.name}</h4>
               <span className="mt-spacer" />
-              {site.canManage && (
+              {site.canManage ? (
                 <>
                   <button className="st-chip" onClick={() => rename(site)}>이름 변경</button>
-                  <button className="st-chip" onClick={() => removeSite(site)}>사이트 삭제</button>
+                  <button className="st-chip" onClick={() => removeSite(site)}>모니터링 삭제</button>
                 </>
+              ) : (
+                <button className="st-chip" onClick={() => leave(site)}>목록에서 빼기</button>
               )}
             </div>
-            <p className="st-muted">
-              초대코드 <b className="st-code-inline">{site.inviteCode}</b> — 동료는 이 코드로 참여하고, 스테이션 기기도 이 코드로 등록합니다.
-              <br />
-              Telegram 그룹으로도 받으려면 그룹에 봇을 초대하고 <code>/link {site.inviteCode}</code> 를 보내세요.
-            </p>
+            {site.canManage ? (
+              <p className="st-muted">
+                🔒 보안코드 <b className="st-code-inline">{site.viewCode}</b>{" "}
+                <button className="st-link" onClick={() => reissue(site)}>재발급</button>
+                <br />— 이 코드를 받은 사람만 모니터링(사진·라이브)에 들어올 수 있습니다.
+                <br />
+                📷 초대코드 <b className="st-code-inline">{site.inviteCode}</b> — 스테이션 기기 등록 전용입니다.
+                <br />
+                Telegram 그룹으로도 받으려면 그룹에 봇을 초대하고 <code>/link {site.viewCode}</code> 를 보내세요.
+              </p>
+            ) : (
+              <p className="st-muted">보안코드로 참여한 모니터링입니다. 코드는 관리자만 볼 수 있습니다.</p>
+            )}
             {site.stations.length === 0 && <p className="st-muted">등록된 스테이션 없음</p>}
             {site.stations.map((st) => (
               <label key={st.id} className="st-check">
                 <input type="checkbox" checked={st.subscribed} onChange={(e) => onToggle(st, e.target.checked)} />
                 <span className={`mt-dot-inline ${st.online ? "on" : "off"}`} />
                 <span style={{ flex: 1 }}>{st.name}</span>
-                <button
-                  type="button"
-                  className="st-chip"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    removeStation(st);
-                  }}
-                >
-                  삭제
-                </button>
+                {site.canManage && (
+                  <button
+                    type="button"
+                    className="st-chip"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      removeStation(st);
+                    }}
+                  >
+                    삭제
+                  </button>
+                )}
               </label>
             ))}
           </div>

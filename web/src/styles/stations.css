@@ -468,3 +468,24 @@ main.main-full {
   object-fit: contain;
   background: #000;
 }
+/* 라이브 영상 틀 — video(contain)와 SVG(meet)가 같은 비율로 맞춰져 박스가 정확히 겹친다 */
+.lv-stage {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+.lv-fill {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  display: block;
+}
+.lv-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}

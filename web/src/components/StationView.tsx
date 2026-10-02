@@ -10,7 +10,8 @@ import {
   stationSocketUrl,
   type StationCreds,
 } from "../lib/api";
-import { LABEL_COLOR, type ClothingAttributes, type DetectionBox } from "../lib/labels";
+import type { ClothingAttributes, DetectionBox } from "../lib/labels";
+import { buildOverlay, drawOverlay, type OverlayItem } from "../lib/overlay";
 import { ViolationTracker } from "../lib/violationTracker";
 import {
   fitRect,
@@ -28,6 +29,7 @@ import {
 
 const INFER_INTERVAL_MS = 1000; // 상시 감시는 0.5초가 필요 없다 — 발열·배터리 절감
 const SNAPSHOT_REFRESH_MS = 10 * 60 * 1000; // 위반이 없어도 10분마다 "현재 모습" 갱신
+const OVERLAY_FRESH_MS = 2500; // 이보다 오래된 감지 박스는 라이브 사진에 그리지 않음
 const MAX_LIVE_SESSIONS = 3;
 const PING_MS = 25000;
 
@@ -142,6 +144,7 @@ function StationRunner({
   const inflightRef = useRef(false);
   const queueRef = useRef<Array<{ label: string; score: number; image: string }>>([]);
   const lastSnapshotRef = useRef(0);
+  const overlayRef = useRef<{ items: OverlayItem[]; at: number }>({ items: [], at: 0 }); // 최근 감지 박스
 
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
   const [modelReady, setModelReady] = useState(false);
@@ -185,7 +188,7 @@ function StationRunner({
 
   // ── 사진 캡처 (추론 프레임 + 감지 박스 + 구역을 그려 축소) ──
   const capture = useCallback(
-    (maxW: number, quality: number, boxes: DetectionBox[] = []): string | null => {
+    (maxW: number, quality: number, items: OverlayItem[] = []): string | null => {
       const video = videoRef.current;
       if (!video || video.readyState < 2 || !video.videoWidth) return null;
       const c = (snapRef.current ??= document.createElement("canvas"));
@@ -207,11 +210,7 @@ function StationRunner({
         ctx.lineWidth = 2;
         ctx.stroke();
       }
-      ctx.lineWidth = Math.max(2, Math.round(c.width / 240));
-      for (const b of boxes) {
-        ctx.strokeStyle = LABEL_COLOR[b.label] ?? "#fff";
-        ctx.strokeRect(b.x * scale, b.y * scale, b.width * scale, b.height * scale);
-      }
+      drawOverlay(ctx, items, c.width, c.height);
       return c.toDataURL("image/jpeg", quality).replace("data:image/jpeg;base64,", "");
     },
     []
@@ -242,6 +241,7 @@ function StationRunner({
     (data: {
       boxes: DetectionBox[];
       clothing: ClothingAttributes | null;
+      personBox?: { x: number; y: number; width: number; height: number } | null;
       persons?: Array<{ x: number; y: number; width: number; height: number }>;
     }) => {
       const present = new Map<string, number>(); // label → 최고 점수
@@ -256,14 +256,30 @@ function StationRunner({
 
       const video = videoRef.current;
       const z = zoneRef.current;
-      if (isZoneActive(z) && data.persons && video?.videoWidth) {
-        const frame = { width: video.videoWidth, height: video.videoHeight };
-        if (data.persons.some((p) => personInZone(p, frame, z))) present.set("zone_intrusion", 1);
+      const frame = { width: video?.videoWidth || 1, height: video?.videoHeight || 1 };
+      const inZone = isZoneActive(z) && data.persons && video?.videoWidth ? data.persons.filter((p) => personInZone(p, frame, z)) : [];
+      if (inZone.length) present.set("zone_intrusion", 1);
+
+      // 박스 + 문구 + 확률 (사진·라이브 공통)
+      const items = buildOverlay(
+        frame,
+        data.boxes,
+        clothingRef.current ? data.clothing : null,
+        data.personBox ?? null,
+        inZone
+      );
+      overlayRef.current = { items, at: Date.now() };
+      // 라이브 영상(WebRTC) 시청자에게 박스 좌표만 보낸다 — 영상 위에 겹쳐 그림
+      if (liveRef.current.size > 0) {
+        const ws = wsRef.current;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          liveRef.current.forEach((_, conn) => ws.send(JSON.stringify({ t: "boxes", to: conn, items })));
+        }
       }
 
       const due = trackerRef.current.update(present.keys(), Date.now());
       if (due.length === 0) return;
-      const image = capture(640, 0.6, data.boxes);
+      const image = capture(640, 0.6, items);
       if (!image) return;
       for (const label of due) void sendReport(label, present.get(label) ?? 0, image);
     },
@@ -409,7 +425,8 @@ function StationRunner({
       const sendFrame = () => {
         const ws = wsRef.current;
         if (!ws || ws.readyState !== WebSocket.OPEN || ws.bufferedAmount > 400_000) return;
-        const data = capture(480, 0.5);
+        const o = overlayRef.current;
+        const data = capture(480, 0.5, Date.now() - o.at < OVERLAY_FRESH_MS ? o.items : []);
         if (data) ws.send(JSON.stringify({ t: "frame", to: conn, data }));
       };
       sendFrame();

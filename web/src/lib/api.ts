@@ -106,7 +106,8 @@ export interface MeStation {
 export interface MeSite {
   id: string;
   name: string;
-  inviteCode: string;
+  inviteCode: string | null; // 스테이션 등록용 (관리자에게만 보임)
+  viewCode: string | null; // 모니터링 참여용 보안코드 (관리자에게만 보임)
   canManage: boolean; // 소유자(또는 소유자 정보 없는 예전 사이트의 참여자)만 이름 변경·삭제 가능
   stations: MeStation[];
 }
@@ -118,17 +119,21 @@ export interface Me {
 
 export const getMe = (user: UserCreds) => call<Me>("/api/me", { user });
 export const createSite = (user: UserCreds, name: string) =>
-  call<{ site: { id: string; name: string; inviteCode: string } }>("/api/sites", {
+  call<{ site: { id: string; name: string; inviteCode: string; viewCode: string } }>("/api/sites", {
     method: "POST",
     body: { name },
     user,
   });
-export const joinSite = (user: UserCreds, inviteCode: string) =>
+export const joinSite = (user: UserCreds, viewCode: string) =>
   call<{ site: { id: string; name: string } }>("/api/join", {
     method: "POST",
-    body: { inviteCode },
+    body: { viewCode },
     user,
   });
+export const reissueViewCode = (user: UserCreds, siteId: string) =>
+  call<{ viewCode: string }>(`/api/sites/${siteId}/view-code`, { method: "POST", user });
+export const leaveSite = (user: UserCreds, siteId: string) =>
+  call<{ ok: true }>(`/api/sites/${siteId}/membership`, { method: "DELETE", user });
 export const renameSite = (user: UserCreds, siteId: string, name: string) =>
   call<{ ok: true; name: string }>(`/api/sites/${siteId}`, { method: "PUT", body: { name }, user });
 export const deleteSite = (user: UserCreds, siteId: string) =>
