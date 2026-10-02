@@ -64,4 +64,6 @@ training/harness_crops/
 training/sleeve_crops/
 training/pants_crops/
 training/runs/
+training/drone/visdrone_yolo/
+training/drone/runs/
 yolov8n.pt
