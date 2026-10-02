@@ -11,6 +11,7 @@ interface Attach {
   role: "station" | "viewer";
   id: string; // stationId 또는 userId
   conn: string; // 소켓 고유 ID
+  kicked?: boolean; // 내보낸 참여자 — 소켓이 완전히 닫히기 전이라도 아무것도 보내지 않는다
 }
 
 const TO_STATION = new Set(["live-start", "live-stop", "offer", "answer", "ice", "rtc-up"]);
@@ -37,6 +38,24 @@ export class SiteHub extends DurableObject<Env> {
 
     if (url.pathname === "/broadcast") {
       this.toViewers(await req.text());
+      return new Response("ok");
+    }
+
+    // 참여자 내보내기 — 그 사람의 열린 모니터링 연결을 즉시 끊는다 (userId 없으면 개설자 외 전원)
+    if (url.pathname === "/kick-viewer") {
+      const only = url.searchParams.get("userId");
+      const keep = url.searchParams.get("keep");
+      for (const s of this.ctx.getWebSockets()) {
+        const a = s.deserializeAttachment() as Attach | null;
+        if (a?.role !== "viewer" || (only && a.id !== only) || (keep && a.id === keep)) continue;
+        try {
+          s.serializeAttachment({ ...a, kicked: true } satisfies Attach);
+          s.send(JSON.stringify({ t: "kicked" }));
+          s.close(1000, "kicked");
+        } catch {
+          /* 이미 끊김 */
+        }
+      }
       return new Response("ok");
     }
 
@@ -104,14 +123,16 @@ export class SiteHub extends DurableObject<Env> {
     } catch {
       return;
     }
-    if (!msg.t || !msg.to) return;
+    if (!msg.t || !msg.to || a.kicked) return;
 
     if (a.role === "viewer" && TO_STATION.has(msg.t)) {
       const out = JSON.stringify({ ...msg, from: a.conn });
       for (const s of this.ctx.getWebSockets(`station:${msg.to}`)) safeSend(s, out);
     } else if (a.role === "station" && TO_VIEWER.has(msg.t)) {
       const out = JSON.stringify({ ...msg, stationId: a.id });
-      for (const v of this.ctx.getWebSockets(`c:${msg.to}`)) safeSend(v, out);
+      for (const v of this.ctx.getWebSockets(`c:${msg.to}`)) {
+        if (!(v.deserializeAttachment() as Attach | null)?.kicked) safeSend(v, out);
+      }
     }
   }
 
@@ -166,7 +187,7 @@ export class SiteHub extends DurableObject<Env> {
   private toViewers(text: string) {
     for (const s of this.ctx.getWebSockets()) {
       const a = s.deserializeAttachment() as Attach | null;
-      if (a?.role === "viewer" && s.readyState === WebSocket.OPEN) {
+      if (a?.role === "viewer" && !a.kicked && s.readyState === WebSocket.OPEN) {
         try {
           s.send(text);
         } catch {

@@ -7,7 +7,9 @@ import {
   getMe,
   getTelegramLink,
   joinSite,
+  kickMember,
   leaveSite,
+  listMembers,
   reissueViewCode,
   removeStationAsUser,
   renameSite,
@@ -15,6 +17,7 @@ import {
   snapshotUrl,
   viewerSocketUrl,
   type Me,
+  type Member,
   type MeStation,
   type UserCreds,
 } from "../lib/api";
@@ -169,6 +172,9 @@ export default function MonitorView({ onBack }: { onBack?: () => void }) {
             setFlash((f) => ({ ...f, [msg.stationId as string]: Date.now() + FLASH_MS }));
             if (soundRef.current) beep();
           }
+        } else if (msg.t === "kicked") {
+          window.alert("개설자가 이 모니터링에서 내보냈습니다.");
+          void refresh(user);
         } else if (
           msg.t === "station-added" ||
           msg.t === "station-removed" ||
@@ -338,6 +344,7 @@ export default function MonitorView({ onBack }: { onBack?: () => void }) {
 function SiteJoin({ user, onDone }: { user: UserCreds; onDone: () => void }) {
   const [code, setCode] = useState("");
   const [siteName, setSiteName] = useState("");
+  const [nickname, setNickname] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -367,10 +374,17 @@ function SiteJoin({ user, onDone }: { user: UserCreds; onDone: () => void }) {
           placeholder="보안코드 8자리"
           onChange={(e) => setCode(e.target.value.toUpperCase().replace(/\s/g, ""))}
         />
-        <button className="st-btn st-primary" disabled={busy || code.length < 8} onClick={() => run(() => joinSite(user, code))}>
+        <button className="st-btn st-primary" disabled={busy || code.length < 8} onClick={() => run(() => joinSite(user, code, nickname.trim()))}>
           참여
         </button>
       </div>
+      <input
+        className="st-input"
+        value={nickname}
+        maxLength={20}
+        placeholder="내 이름 (선택, 개설자에게 표시)"
+        onChange={(e) => setNickname(e.target.value)}
+      />
       <label className="st-label">새 사이트 만들기</label>
       <div className="st-row">
         <input
@@ -507,6 +521,7 @@ function SettingsPanel({
             ) : (
               <p className="st-muted">보안코드로 참여한 모니터링입니다. 코드는 관리자만 볼 수 있습니다.</p>
             )}
+            {site.canManage && <Members user={user} siteId={site.id} />}
             {site.stations.length === 0 && <p className="st-muted">등록된 스테이션 없음</p>}
             {site.stations.map((st) => (
               <label key={st.id} className="st-check">
@@ -536,6 +551,74 @@ function SettingsPanel({
           스테이션 {me.limits.stationCount}/{me.limits.maxStations}개 사용 중
         </p>
       </div>
+    </div>
+  );
+}
+
+// 개설자 전용: 보안코드로 들어온 참여자 목록 + 내보내기
+function Members({ user, siteId }: { user: UserCreds; siteId: string }) {
+  const [open, setOpen] = useState(false);
+  const [list, setList] = useState<Member[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      setList((await listMembers(user, siteId)).members);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "불러오기 실패");
+    }
+  }, [user, siteId]);
+
+  useEffect(() => {
+    if (open) void load();
+  }, [open, load]);
+
+  const label = (m: Member, i: number) => m.nickname || `이름 없음 #${i + 1}`;
+  const when = (sec: number) =>
+    sec ? new Date(sec * 1000).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "이전 참여";
+
+  const kick = async (m?: Member, i = 0) => {
+    const msg = m
+      ? `'${label(m, i)}'을(를) 내보낼까요? 바로 화면이 끊기고 알림도 해제됩니다.`
+      : "개설자를 뺀 참여자 전원을 내보낼까요?\n코드가 유출됐다면 보안코드 재발급도 함께 하세요.";
+    if (!window.confirm(msg)) return;
+    try {
+      await kickMember(user, siteId, m?.id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "내보내기 실패");
+    }
+  };
+
+  if (!open) {
+    return (
+      <button className="st-chip" onClick={() => setOpen(true)}>
+        👥 참여자 관리
+      </button>
+    );
+  }
+  return (
+    <div className="mt-members">
+      <div className="st-row">
+        <strong>👥 참여자 {list ? `${list.length}명` : ""}</strong>
+        <span className="mt-spacer" />
+        {list && list.length > 0 && (
+          <button className="st-chip" onClick={() => kick()}>모두 내보내기</button>
+        )}
+        <button className="st-chip" onClick={() => setOpen(false)}>접기</button>
+      </div>
+      {error && <p className="st-error">{error}</p>}
+      {list?.length === 0 && <p className="st-muted">보안코드로 들어온 참여자가 없습니다.</p>}
+      {list?.map((m, i) => (
+        <div key={m.id} className="st-row mt-member">
+          <span style={{ flex: 1 }}>
+            {label(m, i)}
+            <span className="st-muted"> · {when(m.joinedAt)}{m.telegramLinked ? " · 알림 연결" : ""}</span>
+          </span>
+          <button className="st-chip" onClick={() => kick(m, i)}>내보내기</button>
+        </div>
+      ))}
     </div>
   );
 }

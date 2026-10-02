@@ -250,6 +250,51 @@ try {
   assert.equal((await api("/api/subscriptions", { method: "PUT", user: outsider, body: { stationId: sA.stationId, on: true } })).status, 403);
   ok("참여자 목록에서 빼기 → 사이트·구독 해제");
 
+  // 참여자 내보내기: 개설자만, 열린 모니터링 연결 즉시 끊김
+  const carol = (await api("/api/users", { method: "POST" })).data;
+  await api("/api/join", { method: "POST", user: carol, body: { viewCode: re.data.viewCode, nickname: "  철수  " } });
+  await api("/api/subscriptions", { method: "PUT", user: carol, body: { stationId: sA.stationId, on: true } });
+  const carolWs = new WebSocket(`${API.replace("http", "ws")}/ws?role=viewer&siteId=${site.id}&userId=${carol.userId}&token=${carol.userToken}`);
+  const carolMsgs = [];
+  await new Promise((r) => (carolWs.onopen = r));
+  carolWs.onmessage = (e) => carolMsgs.push(JSON.parse(e.data).t);
+  assert.equal((await api(`/api/sites/${site.id}/members`, { user: bob })).status, 403);
+  const members = (await api(`/api/sites/${site.id}/members`, { user: alice })).data.members;
+  const cm = members.find((x) => x.id === carol.userId);
+  assert.equal(cm.nickname, "철수");
+  assert.ok(cm.joinedAt > 0);
+  assert.ok(!members.some((x) => x.id === alice.userId));
+  ok("참여자 목록: 개설자만, 이름(공백 정리)·참여 시각 표시, 본인 제외");
+
+  assert.equal((await api(`/api/sites/${site.id}/members/${carol.userId}`, { method: "DELETE", user: bob })).status, 403);
+  assert.equal((await api(`/api/sites/${site.id}/members/${alice.userId}`, { method: "DELETE", user: alice })).status, 400);
+  assert.equal((await api(`/api/sites/${site.id}/members/${carol.userId}`, { method: "DELETE", user: alice })).status, 200);
+  assert.ok(await wait(() => carolMsgs.includes("kicked")));
+  // 소켓이 바로 안 닫혀도 내보낸 뒤로는 아무것도 받지 않아야 한다 (스테이션 접속 → presence가 오면 안 됨)
+  const afterKick = carolMsgs.length;
+  const sK = (await api("/api/stations", { method: "POST", body: { inviteCode: site.inviteCode, name: "내보내기 확인" } })).data;
+  const kWs = new WebSocket(`${API.replace("http", "ws")}/ws?role=station&stationId=${sK.stationId}&token=${sK.stationToken}`);
+  await new Promise((r) => (kWs.onopen = r));
+  await sleep(1500);
+  assert.equal(carolMsgs.length, afterKick, `내보낸 뒤 받은 메시지: ${carolMsgs.slice(afterKick)}`);
+  kWs.close();
+  carolWs.close();
+  assert.equal((await api("/api/me", { user: carol })).data.sites.length, 0);
+  assert.equal((await api("/api/subscriptions", { method: "PUT", user: carol, body: { stationId: sA.stationId, on: true } })).status, 403);
+  const carolRe = await new Promise((r) => {
+    const w = new WebSocket(`${API.replace("http", "ws")}/ws?role=viewer&siteId=${site.id}&userId=${carol.userId}&token=${carol.userToken}`);
+    w.onopen = () => (w.close(), r("열림"));
+    w.onerror = () => r("거부");
+  });
+  assert.equal(carolRe, "거부");
+  ok("개별 내보내기: kicked 알림 후 메시지 차단, 구독·재접속 차단 (참여자는 403, 본인은 400)");
+
+  const all = await api(`/api/sites/${site.id}/members`, { method: "DELETE", user: alice });
+  assert.equal(all.status, 200);
+  assert.equal((await api("/api/me", { user: bob })).data.sites.some((x) => x.id === site.id), false);
+  assert.ok((await api("/api/me", { user: alice })).data.sites.some((x) => x.id === site.id));
+  ok("모두 내보내기: 개설자만 남음");
+
   // 사이트 삭제: 소유자만, 스테이션·구독 함께 정리
   assert.equal((await api(`/api/sites/${site.id}`, { method: "DELETE", user: bob })).status, 403);
   const del = await api(`/api/sites/${site.id}`, { method: "DELETE", user: alice });

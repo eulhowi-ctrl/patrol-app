@@ -152,6 +152,11 @@ export default {
       if (mm && m === "POST") return await reissueViewCode(env, uid, mm[1]);
       mm = path.match(/^\/api\/sites\/([\w-]+)\/membership$/);
       if (mm && m === "DELETE") return await leaveSite(env, uid, mm[1]);
+      mm = path.match(/^\/api\/sites\/([\w-]+)\/members$/);
+      if (mm && m === "GET") return await listMembers(env, uid, mm[1]);
+      if (mm && m === "DELETE") return await kickMembers(env, uid, mm[1], null);
+      mm = path.match(/^\/api\/sites\/([\w-]+)\/members\/([\w-]+)$/);
+      if (mm && m === "DELETE") return await kickMembers(env, uid, mm[1], mm[2]);
 
       return err(404, "없는 경로입니다.");
     } catch (e) {
@@ -202,7 +207,7 @@ async function createSite(req: Request, env: Env, uid: string) {
         env.DB.prepare(
           "INSERT INTO sites (id, name, invite_code, view_code, created_at, owner_id) VALUES (?, ?, ?, ?, ?, ?)"
         ).bind(id, name, code, viewCode, nowSec(), uid),
-        env.DB.prepare("INSERT INTO user_sites (user_id, site_id) VALUES (?, ?)").bind(uid, id),
+        env.DB.prepare("INSERT INTO user_sites (user_id, site_id, joined_at) VALUES (?, ?, ?)").bind(uid, id, nowSec()),
       ]);
       return json({ site: { id, name, inviteCode: code, viewCode } });
     } catch {
@@ -214,8 +219,9 @@ async function createSite(req: Request, env: Env, uid: string) {
 
 // 모니터링 참여는 보안코드로만. 초대코드(스테이션 등록용)로는 사진·라이브를 볼 수 없다.
 async function joinSite(req: Request, env: Env, uid: string) {
-  const body = await readJson<{ viewCode?: string }>(req);
+  const body = await readJson<{ viewCode?: string; nickname?: string }>(req);
   const code = (body?.viewCode ?? "").trim().toUpperCase();
+  const nickname = cleanName(body?.nickname, 20) || null;
   const site = code
     ? await env.DB.prepare("SELECT id, name FROM sites WHERE view_code = ?")
         .bind(code)
@@ -232,8 +238,11 @@ async function joinSite(req: Request, env: Env, uid: string) {
         : "보안코드를 찾을 수 없습니다."
     );
   }
-  await env.DB.prepare("INSERT OR IGNORE INTO user_sites (user_id, site_id) VALUES (?, ?)")
-    .bind(uid, site.id)
+  await env.DB.prepare(
+    `INSERT INTO user_sites (user_id, site_id, joined_at, nickname) VALUES (?, ?, ?, ?)
+     ON CONFLICT(user_id, site_id) DO UPDATE SET nickname = COALESCE(excluded.nickname, user_sites.nickname)`
+  )
+    .bind(uid, site.id, nowSec(), nickname)
     .run();
   return json({ site });
 }
@@ -468,6 +477,44 @@ async function reissueViewCode(env: Env, uid: string, siteId: string) {
     }
   }
   return err(500, "보안코드 생성 실패");
+}
+
+// 개설자용 참여자 목록 (본인 제외). 로그인이 없어 이름은 참여 때 적은 것(선택)
+async function listMembers(env: Env, uid: string, siteId: string) {
+  if (!(await manageableSite(env, uid, siteId))) return err(403, "개설자만 볼 수 있습니다.");
+  const rows = (
+    await env.DB.prepare(
+      `SELECT u.user_id, u.nickname, u.joined_at, us.telegram_chat_id IS NOT NULL AS tg
+       FROM user_sites u JOIN users us ON us.id = u.user_id
+       WHERE u.site_id = ? AND u.user_id != ? ORDER BY u.joined_at`
+    )
+      .bind(siteId, uid)
+      .all<{ user_id: string; nickname: string | null; joined_at: number; tg: number }>()
+  ).results;
+  return json({
+    members: rows.map((r) => ({ id: r.user_id, nickname: r.nickname, joinedAt: r.joined_at, telegramLinked: r.tg === 1 })),
+  });
+}
+
+// 내보내기: 참여·구독 해제 + 열린 모니터링 연결 즉시 끊기. memberId가 null이면 개설자 외 전원
+async function kickMembers(env: Env, uid: string, siteId: string, memberId: string | null) {
+  if (!(await manageableSite(env, uid, siteId))) return err(403, "개설자만 내보낼 수 있습니다.");
+  if (memberId === uid) return err(400, "자기 자신은 내보낼 수 없습니다.");
+  const who = memberId ? "AND user_id = ?" : "AND user_id != ?";
+  const target = memberId ?? uid;
+  const res = await env.DB.batch([
+    env.DB.prepare(
+      `DELETE FROM subscriptions WHERE station_id IN (SELECT id FROM stations WHERE site_id = ?) ${who}`
+    ).bind(siteId, target),
+    env.DB.prepare(`DELETE FROM user_sites WHERE site_id = ? ${who}`).bind(siteId, target),
+  ]);
+  const q = memberId ? `userId=${memberId}` : `keep=${uid}`;
+  try {
+    await hubFor(env, siteId).fetch(`https://hub/kick-viewer?${q}`, { method: "POST" });
+  } catch (e) {
+    console.warn("[hub] kick-viewer 실패", e);
+  }
+  return json({ ok: true, removed: res[1].meta.changes ?? 0 });
 }
 
 // 참여자가 모니터링 목록에서 사이트를 뺀다 (사이트 자체는 남음)

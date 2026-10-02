@@ -124,10 +124,24 @@ export const createSite = (user: UserCreds, name: string) =>
     body: { name },
     user,
   });
-export const joinSite = (user: UserCreds, viewCode: string) =>
+export const joinSite = (user: UserCreds, viewCode: string, nickname?: string) =>
   call<{ site: { id: string; name: string } }>("/api/join", {
     method: "POST",
-    body: { viewCode },
+    body: { viewCode, nickname },
+    user,
+  });
+export interface Member {
+  id: string;
+  nickname: string | null;
+  joinedAt: number;
+  telegramLinked: boolean;
+}
+export const listMembers = (user: UserCreds, siteId: string) =>
+  call<{ members: Member[] }>(`/api/sites/${siteId}/members`, { user });
+// memberId 없으면 개설자 외 전원 내보내기
+export const kickMember = (user: UserCreds, siteId: string, memberId?: string) =>
+  call<{ ok: true; removed: number }>(`/api/sites/${siteId}/members${memberId ? `/${memberId}` : ""}`, {
+    method: "DELETE",
     user,
   });
 export const reissueViewCode = (user: UserCreds, siteId: string) =>

@@ -511,3 +511,15 @@ main.main-full {
   height: 100%;
   pointer-events: none;
 }
+
+/* 개설자 참여자 관리 목록 */
+.mt-members {
+  margin: 8px 0;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+}
+.mt-member {
+  padding: 4px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
