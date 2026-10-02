@@ -57,6 +57,12 @@ function inviteCode(len = 6): string {
 const cleanName = (v: unknown, max = 30) =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
 
+// 사람 이름용: 보이지 않는 문자(제어·서식, 한글 채움 ㅤ, 점자 빈칸)를 지우고 공백을 한 칸으로.
+// 화면에 빈칸으로 보이는 이름이 통과하지 않게 한다. (앱 MonitorView의 cleanNickname과 같은 규칙)
+const INVISIBLE = /[\p{Cc}\p{Cf}\u115F\u1160\u3164\uFFA0\u2800]/gu;
+const cleanNickname = (v: unknown, max = 20) =>
+  typeof v === "string" ? v.replace(INVISIBLE, "").replace(/\s+/g, " ").trim().slice(0, max) : "";
+
 async function readJson<T>(req: Request): Promise<T | null> {
   try {
     return (await req.json()) as T;
@@ -222,7 +228,7 @@ async function joinSite(req: Request, env: Env, uid: string) {
   const body = await readJson<{ viewCode?: string; nickname?: string }>(req);
   const code = (body?.viewCode ?? "").trim().toUpperCase();
   // 이름 필수: 개설자가 참여자 목록에서 누군지 알아볼 수 있어야 한다 (공백만은 금지)
-  const nickname = cleanName(body?.nickname, 20);
+  const nickname = cleanNickname(body?.nickname);
   if (!nickname) return err(400, "이름을 입력해야 참여할 수 있습니다.");
   const site = code
     ? await env.DB.prepare("SELECT id, name FROM sites WHERE view_code = ?")

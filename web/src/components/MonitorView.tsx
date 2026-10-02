@@ -28,6 +28,10 @@ import LiveView, { type SiteMessage } from "./LiveView";
 // 칸을 누르면 그 스테이션을 실시간으로 본다. 알림은 Telegram으로 받는다.
 
 const FLASH_MS = 6000;
+
+// 이름 정리: 보이지 않는 문자를 지우고 판정 (서버 cleanNickname과 같은 규칙)
+const INVISIBLE = /[\p{Cc}\p{Cf}\u115F\u1160\u3164\uFFA0\u2800]/gu;
+const cleanNickname = (v: string) => v.replace(INVISIBLE, "").replace(/\s+/g, " ").trim();
 const PING_MS = 25000;
 
 function beep() {
@@ -382,11 +386,11 @@ function SiteJoin({ user, onDone }: { user: UserCreds; onDone: () => void }) {
           placeholder="보안코드 8자리"
           onChange={(e) => setCode(e.target.value.toUpperCase().replace(/\s/g, ""))}
         />
-        <button className="st-btn st-primary" disabled={busy || code.length < 8 || !nickname.trim()} onClick={() => run(() => joinSite(user, code, nickname.trim()))}>
+        <button className="st-btn st-primary" disabled={busy || code.length < 8 || !cleanNickname(nickname)} onClick={() => run(() => joinSite(user, code, cleanNickname(nickname)))}>
           참여
         </button>
       </div>
-      {code.length === 8 && !nickname.trim() && <p className="st-muted">이름을 입력해야 참여할 수 있습니다.</p>}
+      {code.length === 8 && !cleanNickname(nickname) && <p className="st-muted">이름을 입력해야 참여할 수 있습니다.</p>}
       <label className="st-label">새 사이트 만들기</label>
       <div className="st-row">
         <input

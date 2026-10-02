@@ -102,9 +102,12 @@ try {
   assert.match(byInvite.data.error, /보안코드/);
   assert.equal((await api("/api/join", { method: "POST", user: bob, body: { viewCode: "ZZZZZZZZ", nickname: "밥" } })).status, 404);
   assert.equal((await api("/api/join", { method: "POST", user: bob, body: { viewCode: site.viewCode } })).status, 400);
-  assert.equal((await api("/api/join", { method: "POST", user: bob, body: { viewCode: site.viewCode, nickname: "   " } })).status, 400);
+  // 빈칸처럼 보이는 이름: 공백·탭·전각 공백·NBSP·zero-width·한글 채움(ㅤ)·점자 빈칸
+  for (const blank of ["   ", "\t\n", "\u3000", "\u00A0", "\u200B\u200B", "\u200D\u2060\uFEFF", "\u3164", "\u115F\u1160", "\u2800"]) {
+    assert.equal((await api("/api/join", { method: "POST", user: bob, body: { viewCode: site.viewCode, nickname: blank } })).status, 400, JSON.stringify(blank));
+  }
   assert.equal((await api("/api/me", { user: bob })).data.sites.length, 0);
-  ok("이름 없이(빈칸·공백만) 참여 → 400, 참여 안 됨");
+  ok("이름 없이(빈칸·공백·보이지 않는 문자만) 참여 → 400, 참여 안 됨");
   assert.equal((await api("/api/join", { method: "POST", user: bob, body: { viewCode: site.viewCode.toLowerCase(), nickname: "밥" } })).status, 200);
   ok("모니터링 참여는 보안코드로만 (초대코드·틀린 코드는 404)");
   const bobMe = (await api("/api/me", { user: bob })).data.sites[0];
