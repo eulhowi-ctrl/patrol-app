@@ -168,6 +168,28 @@ main.main-full {
   background: #000;
 }
 
+/* 감지 박스 오버레이: 영상 영역에 정확히 겹치고 터치는 통과 */
+.st-det {
+  position: absolute;
+  pointer-events: none;
+}
+.st-det-box {
+  position: absolute;
+  border: 2px solid #fff;
+  box-sizing: border-box;
+}
+.st-det-tag {
+  position: absolute;
+  left: -2px;
+  bottom: 100%;
+  padding: 1px 6px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  line-height: 1.35;
+}
+
 .st-zone,
 .st-zone-hit {
   position: absolute;

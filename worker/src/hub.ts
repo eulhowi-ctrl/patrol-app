@@ -14,6 +14,15 @@ interface Attach {
 }
 
 const TO_STATION = new Set(["live-start", "live-stop", "offer", "answer", "ice", "rtc-up"]);
+// 끊기는 중인 소켓에 보내면 예외가 나서 허브 전체가 멈출 수 있다 — 개별 실패는 무시
+function safeSend(ws: WebSocket, text: string) {
+  try {
+    ws.send(text);
+  } catch {
+    /* 끊긴 소켓 */
+  }
+}
+
 const TO_VIEWER = new Set(["offer", "answer", "ice", "frame", "boxes", "live-error"]);
 
 export class SiteHub extends DurableObject<Env> {
@@ -99,10 +108,10 @@ export class SiteHub extends DurableObject<Env> {
 
     if (a.role === "viewer" && TO_STATION.has(msg.t)) {
       const out = JSON.stringify({ ...msg, from: a.conn });
-      for (const s of this.ctx.getWebSockets(`station:${msg.to}`)) s.send(out);
+      for (const s of this.ctx.getWebSockets(`station:${msg.to}`)) safeSend(s, out);
     } else if (a.role === "station" && TO_VIEWER.has(msg.t)) {
       const out = JSON.stringify({ ...msg, stationId: a.id });
-      for (const v of this.ctx.getWebSockets(`c:${msg.to}`)) v.send(out);
+      for (const v of this.ctx.getWebSockets(`c:${msg.to}`)) safeSend(v, out);
     }
   }
 
@@ -135,7 +144,7 @@ export class SiteHub extends DurableObject<Env> {
     } else {
       // 보던 사람이 사라지면 스테이션의 라이브 송출을 멈추게 한다
       const out = JSON.stringify({ t: "viewer-gone", from: a.conn });
-      for (const s of this.stationSockets()) s.send(out);
+      for (const s of this.stationSockets()) safeSend(s, out);
     }
   }
 

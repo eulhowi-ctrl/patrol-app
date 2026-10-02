@@ -101,7 +101,7 @@ export default function Home() {
         ) : view === "monitor" ? (
           <MonitorView onBack={() => go("home")} />
         ) : view === "dashboard" ? (
-          <Dashboard onEnterPatrol={() => go("patrol")} />
+          <Dashboard onEnterPatrol={() => go("patrol")} onBack={() => go("home")} />
         ) : (
           <CameraView onBack={() => go("dashboard")} />
         )}

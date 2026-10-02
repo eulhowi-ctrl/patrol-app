@@ -157,6 +157,7 @@ function StationRunner({
   const [zoneEditing, setZoneEditing] = useState(false);
   const [stageSize, setStageSize] = useState({ w: 0, h: 0, vw: 0, vh: 0 });
   const [lastReport, setLastReport] = useState<string | null>(null);
+  const [shown, setShown] = useState<{ items: OverlayItem[]; at: number }>({ items: [], at: 0 }); // 화면에 그릴 감지 박스
   const [now, setNow] = useState(Date.now());
 
   // 콜백 안에서 최신 값을 읽기 위한 ref
@@ -269,6 +270,7 @@ function StationRunner({
         inZone
       );
       overlayRef.current = { items, at: Date.now() };
+      setShown(overlayRef.current);
       // 라이브 영상(WebRTC) 시청자에게 박스 좌표만 보낸다 — 영상 위에 겹쳐 그림
       if (liveRef.current.size > 0) {
         const ws = wsRef.current;
@@ -574,6 +576,26 @@ function StationRunner({
     <div className="st-root">
       <div className="st-stage" ref={stageRef}>
         <video ref={videoRef} className="st-video" playsInline muted onLoadedMetadata={measure} />
+        {/* 이 기기 화면에도 감지 박스 + 문구 + 확률 (영상이 차지하는 영역에 맞춰 겹침) */}
+        {now - shown.at < OVERLAY_FRESH_MS && shown.items.length > 0 && (
+          <div className="st-det" style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}>
+            {shown.items.map((it, i) => (
+              <div
+                key={i}
+                className="st-det-box"
+                style={{
+                  left: `${it.x * 100}%`,
+                  top: `${it.y * 100}%`,
+                  width: `${it.w * 100}%`,
+                  height: `${it.h * 100}%`,
+                  borderColor: it.color,
+                }}
+              >
+                <span className="st-det-tag" style={{ background: it.color }}>{it.text}</span>
+              </div>
+            ))}
+          </div>
+        )}
         {zoneActive && (
           <svg
             className="st-zone"

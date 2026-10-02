@@ -13,9 +13,10 @@ import DonutChart from "./charts/DonutChart";
 
 interface DashboardProps {
   onEnterPatrol: () => void;
+  onBack?: () => void; // 처음 화면(스테이션/모니터링/직접순찰 선택)으로
 }
 
-export default function Dashboard({ onEnterPatrol }: DashboardProps) {
+export default function Dashboard({ onEnterPatrol, onBack }: DashboardProps) {
   const [allRecords, setAllRecords] = useState<DetectionRecord[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [loaded, setLoaded] = useState(false);
@@ -51,6 +52,9 @@ export default function Dashboard({ onEnterPatrol }: DashboardProps) {
 
   return (
     <div className="dashboard">
+      {onBack && (
+        <button className="st-link" onClick={onBack}>← 처음으로</button>
+      )}
       <div className="dashboard-header">
         <h1 className="dashboard-title">ARGUS</h1>
         <p className="dashboard-subtitle">AI Safety Patrol System</p>
