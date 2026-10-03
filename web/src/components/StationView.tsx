@@ -758,7 +758,7 @@ function StationRunner({
         <div className="st-menu">
           <label className="st-check">
             <input type="checkbox" checked={clothingOn} onChange={toggleClothing} />
-            복장 규정 감지 (긴팔·긴바지·안전그네) — 오탐이 늘 수 있어 기본 꺼짐
+            복장 규정 감지 (반팔·반바지) — 오탐이 늘 수 있어 기본 꺼짐. 안전그네는 고소작업 검증 후 추가 예정
           </label>
           <label className="st-check">
             <input type="checkbox" checked={recOn} onChange={toggleRec} />
