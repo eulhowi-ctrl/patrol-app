@@ -1,3 +1,18 @@
+---
+
+## 📋 Project Ownership & License
+
+**This is a personal project developed by Eulhowi (eulhowi@gmail.com).**
+
+- **License**: AGPL 3.0 (See [LICENSE](LICENSE) for details)
+- **Status**: Personal development project
+- **Not affiliated with any company or organization**
+- **Third-party licenses**: VisDrone (non-commercial research), YOLOv8 (AGPL 3.0), etc.
+
+See [ATTRIBUTION.md](ATTRIBUTION.md) for complete license and attribution information.
+
+---
+
 # ARGUS (AI Safety Patrol System)
 
 > 🚧 **진행 중인 작업** (새 세션에서는 아래 문서를 먼저 읽고 "진행 상태" 체크리스트의
